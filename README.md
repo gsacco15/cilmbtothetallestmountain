@@ -22,11 +22,11 @@ Then open http://localhost:8080 in Chrome, Edge, Firefox or Safari.
 
 | | Daddy | Dr. Rielle (a.k.a. Mrs. Rielle) |
 |---|---|---|
-| Who | 6'2", bald, Navy doctor | Doctor |
+| Who | 6'2", bald Navy doctor (black beanie and headlamp, beard, blue trekking poles) | Doctor (long dark hair, tan sherpa jacket) |
 | Health | 130 | 100 |
-| Ice axe | Hits harder | Normal |
+| Trekking pole swing | Hits harder | Normal |
 | Speed | Longer stride | Normal |
-| Special | | First aid heals double, extra stamina, heals faster |
+| Special | | First aid heals double, extra stamina, heals faster, starts with random stuff |
 
 You can change skin tone (and Dr. Rielle's hair color) on the title screen.
 
@@ -38,9 +38,10 @@ You can change skin tone (and Dr. Rielle's hair color) on the title screen.
 | Look around | Move the mouse (click the game first) | Drag the right side |
 | Run | Shift | Run button |
 | Jump | Space | Jump button |
-| Swing ice axe | Click or F | Swing button |
+| Swing trekking pole | Click or F | Swing button |
 | Eat, drink, open crates, sleep | E | Use button |
 | Use backpack items | 1 soup, 2 water, 3 first aid, 4 hand warmer | Tap the item |
+| Use Rielle's random stuff | 5 or G | Tap the purple slot |
 | Pause or give up | Esc | Pause button |
 | Sound on/off | M | Speaker button |
 
@@ -56,7 +57,31 @@ You can change skin tone (and Dr. Rielle's hair color) on the title screen.
 - **Thin air:** the higher you climb, the slower your stamina comes back.
 - **Animals:** rattlesnakes and bears down low, wolves everywhere (lots more at night),
   mountain goats on the rocky slopes, and snow leopards and eagles near the top.
-  Swing your ice axe to scare them off.
+  Swing your trekking pole to scare them off.
+
+## Rielle's Random Stuff
+
+Rielle is sure random stuff will help on the climb. Somehow, it does. Walk into one of
+the purple boxes along the trail to get one random item, then press 5 to use it:
+
+| Item | What it does |
+|---|---|
+| Floor cleaner | Animals in front of you slip on the clean ground and slide away |
+| Stethoscope | Hear every animal nearby for 30 seconds (red markers), plus a little health |
+| Rubber chicken | SQUAWK! Every animal nearby runs away |
+| Banana | A snack, and you drop the peel. Animals that step on it slip |
+| Hot sauce | Your mouth is on fire: lots of warmth |
+| Umbrella | Blocks the next 2 attacks |
+| Bubble wrap | So relaxing: unlimited stamina for 25 seconds |
+| Cold pizza | Lots of food |
+| Whoopee cushion | Animals laugh too hard to attack for 25 seconds |
+| Roller skates | Zoom for 20 seconds |
+| Frying pan | BONK! Swings hit 3 times harder for 30 seconds |
+| Party popper | Does nothing. But it's fun |
+
+There's other random stuff on the mountain too: pink flamingos at Base Camp, a giant
+rubber duck in the big lake, a couch at Camp 1, a snack machine at Camp 2 and a toilet
+at Camp 3 (try flushing it a few times).
 
 ## Code map
 
@@ -69,6 +94,7 @@ You can change skin tone (and Dr. Rielle's hair color) on the title screen.
 | `src/animals.js` | Animal models and how each one hunts |
 | `src/player.js` | Movement, survival stats and the backpack |
 | `src/car.js` | The prize car on the summit |
+| `src/stuff.js` | Rielle's random stuff: items and icons |
 | `src/audio.js` | Sound effects made with the Web Audio API (no sound files) |
 | `src/ui.js`, `index.html`, `style.css` | Menus and the on-screen display |
 | `src/main.js` | Game states and the main loop |

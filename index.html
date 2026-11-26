@@ -35,9 +35,10 @@
       <p class="bet-line">Someone made a bet: climb to the top of the tallest mountain and the Lamborghini is yours.</p>
       <ul class="rules">
         <li><b>Survive day and night.</b> Keep your food, water and warmth up.</li>
-        <li><b>Animals will attack.</b> Swing your ice axe to scare them off.</li>
+        <li><b>Animals will attack.</b> Swing your trekking pole to scare them off.</li>
         <li><b>If you get killed, you're done.</b> You go back to the bottom.</li>
         <li><b>You can give up any time,</b> but then you don't get the Lamborghini.</li>
+        <li><b>Grab Rielle's purple boxes.</b> Floor cleaner? A stethoscope? Rielle says it all helps. Somehow, it does.</li>
       </ul>
     </div>
 
@@ -46,12 +47,12 @@
       <button type="button" id="pick-daddy" class="climber" data-char="daddy" role="radio" aria-checked="true">
         <span class="climber-name">Daddy</span>
         <span class="climber-role">6'2" &middot; Navy doctor</span>
-        <span class="climber-perks">More health &middot; Big axe swing &middot; Long stride</span>
+        <span class="climber-perks">More health &middot; Big pole swing &middot; Long stride</span>
       </button>
       <button type="button" id="pick-rielle" class="climber" data-char="rielle" role="radio" aria-checked="false">
         <span class="climber-name">Dr. Rielle</span>
         <span class="climber-role">a.k.a. Mrs. Rielle &middot; Doctor</span>
-        <span class="climber-perks">First aid heals double &middot; Extra stamina</span>
+        <span class="climber-perks">First aid heals double &middot; Extra stamina &middot; Packs random stuff</span>
       </button>
     </div>
     <div class="customize">
@@ -79,9 +80,10 @@
           <dt>Mouse</dt><dd>Look around (click the game first)</dd>
           <dt><kbd>Shift</kbd></dt><dd>Run (uses stamina)</dd>
           <dt><kbd>Space</kbd></dt><dd>Jump</dd>
-          <dt>Click or <kbd>F</kbd></dt><dd>Swing your ice axe</dd>
+          <dt>Click or <kbd>F</kbd></dt><dd>Swing your trekking pole</dd>
           <dt><kbd>E</kbd></dt><dd>Eat, drink, open crates, sleep</dd>
           <dt><kbd>1</kbd>&ndash;<kbd>4</kbd></dt><dd>Use what's in your backpack</dd>
+          <dt><kbd>5</kbd> or <kbd>G</kbd></dt><dd>Use Rielle's random stuff</dd>
           <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
           <dt><kbd>M</kbd></dt><dd>Sound on or off</dd>
         </dl>
@@ -96,6 +98,7 @@
           <li>Campfires keep you warm and animals stay away from camps.</li>
           <li>Open the supply crate at each camp once a day. Sleep in a tent to skip the night.</li>
           <li>Up high the air is thin, so you get tired faster.</li>
+          <li>Walk into Rielle's purple boxes to get random stuff: floor cleaner, a stethoscope, a rubber chicken, roller skates and more. Try them all.</li>
         </ul>
       </div>
     </div>
@@ -145,11 +148,13 @@
   <div class="toasts" id="toasts" aria-live="polite"></div>
   <div class="prompt" id="prompt" hidden><kbd id="prompt-key">E</kbd><span id="prompt-text"></span></div>
 
+  <div class="buffs" id="buffs" aria-live="polite"></div>
   <div class="inventory" id="inventory">
     <button type="button" class="slot" data-item="ration" id="slot-ration"><kbd>1</kbd><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="7" y="8" width="18" height="18" rx="2" fill="#d8dde2"/><rect x="7" y="12" width="18" height="10" fill="#e2472f"/><ellipse cx="16" cy="8" rx="9" ry="2.5" fill="#b9c0c7"/><path d="M11 17h10" stroke="#fff" stroke-width="2"/></svg><span class="slot-name">Soup</span><span class="slot-count">0</span></button>
     <button type="button" class="slot" data-item="water" id="slot-water"><kbd>2</kbd><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="12" y="3" width="8" height="4" rx="1" fill="#2f6fd6"/><path d="M11 8h10l1 3v16a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2V11z" fill="#8fd3ff"/><path d="M10 16h12v6H10z" fill="#3fb0ff"/></svg><span class="slot-name">Water</span><span class="slot-count">0</span></button>
     <button type="button" class="slot" data-item="firstaid" id="slot-firstaid"><kbd>3</kbd><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="9" width="24" height="17" rx="3" fill="#f4f6f8"/><path d="M12 9V6h8v3" stroke="#c6ccd2" stroke-width="2" fill="none"/><path d="M14 13h4v4h4v4h-4v4h-4v-4h-4v-4h4z" fill="#e0202e"/></svg><span class="slot-name">First aid</span><span class="slot-count">0</span></button>
     <button type="button" class="slot" data-item="warmer" id="slot-warmer"><kbd>4</kbd><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="7" y="6" width="18" height="21" rx="4" fill="#ff8a2a"/><path d="M16 11c3 3 4 5 4 7a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-2-1-4 0-6z" fill="#fff3c4"/></svg><span class="slot-name">Warmer</span><span class="slot-count">0</span></button>
+    <button type="button" class="slot slot-stuff empty" data-item="stuff" id="slot-stuff" aria-label="Use Rielle's random stuff"><kbd>5</kbd><span class="stuff-icon" id="stuff-icon"></span><span class="slot-name" id="stuff-name">Rielle's</span></button>
   </div>
 
   <div class="hurt" id="hurt"></div>

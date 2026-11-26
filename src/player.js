@@ -59,6 +59,11 @@ export class Player {
     this.stepSign = 1;
     this.cheer = false;
     this.wave = false;
+    this.stuff = null;
+    this.buffs = { skates: 0, pan: 0, bubble: 0, umbrella: 0, umbrellaT: 0, use: 0 };
+    this.rig.setGear({});
+    if (this.rig.hat) this.rig.hat.visible = true;
+    this.rig.medal.visible = false;
     this.rig.root.rotation.set(0, yaw, 0);
     this.rig.root.position.copy(this.pos);
   }
@@ -91,9 +96,16 @@ export class Player {
   // mv: { x: right, z: forward, len }
   update(dt, mv, sprintHeld, jumpPressed, camYaw, colliders, events) {
     const st = this.stats;
+    const b = this.buffs;
     this.hitMoment = false;
     this.attackCD -= dt;
     this.invuln -= dt;
+    b.skates = Math.max(0, b.skates - dt);
+    b.pan = Math.max(0, b.pan - dt);
+    b.bubble = Math.max(0, b.bubble - dt);
+    b.use = Math.max(0, b.use - dt);
+    b.umbrellaT = Math.max(0, b.umbrellaT - dt);
+    if (b.umbrellaT <= 0) b.umbrella = 0;
 
     const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
     const rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
@@ -116,6 +128,7 @@ export class Player {
       speed *= this.uphill > 0 ? clamp(1 - this.uphill * 0.55, 0.36, 1) : clamp(1 - this.uphill * 0.12, 1, 1.12);
     }
     if (st.food < 12 || st.water < 12 || st.warmth < 12) speed *= 0.8;
+    if (b.skates > 0) speed *= 1.65;
     const ground0 = heightAt(this.pos.x, this.pos.z);
     this.wading = ground0 < WATER - 0.15;
     if (this.wading) speed *= 0.6;
@@ -187,7 +200,10 @@ export class Player {
       climb: clamp(this.uphill, 0, 1),
       cheer: this.cheer,
       wave: this.wave,
+      umbrella: b.umbrella > 0 && this.alive,
+      use: b.use,
     });
+    this.rig.setGear({ pan: b.pan > 0, umbrella: b.umbrella > 0 && this.alive, skates: b.skates > 0 });
     this.rig.root.position.copy(this.pos);
     this.rig.root.rotation.y = this.yaw;
 
@@ -202,7 +218,8 @@ export class Player {
     const st = this.stats;
     const moving = this.speed > 0.5;
     const running = this.sprinting && this.speed > 6;
-    if (running) st.stamina -= (21 / this.s.stamina) * dt;
+    if (this.buffs.bubble > 0) st.stamina = 100;
+    else if (running) st.stamina -= (21 / this.s.stamina) * dt;
     else st.stamina += 15 * env.air * (this.grounded ? 1 : 0.3) * (moving ? 0.75 : 1.2) * dt;
     st.stamina = clamp(st.stamina, 0, 100);
 

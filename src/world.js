@@ -774,6 +774,205 @@ function buildClouds(scene, world) {
   });
 }
 
+
+// ---------------------------------------------------------------- Rielle's boxes
+function boxTexture() {
+  return canvasTexture(256, 256, (ctx, w, h) => {
+    const g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, '#a46dff');
+    g.addColorStop(1, '#6c3ad6');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#ff7ab6';
+    ctx.fillRect(w / 2 - 18, 0, 36, h);
+    ctx.fillRect(0, h / 2 - 18, w, 36);
+    ctx.strokeStyle = '#3d1f86';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(5, 5, w - 10, h - 10);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 2, 62, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#6c3ad6';
+    ctx.font = `900 104px ${FONT_STACK}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('?', w / 2, h / 2 + 6);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `900 30px ${FONT_STACK}`;
+    ctx.fillText("RIELLE'S STUFF", w / 2, 34);
+  });
+}
+
+function buildBoxes(scene, world) {
+  const spots = [];
+  for (let s = 0; s < ROUTE.length - 1; s++) {
+    const a = ROUTE[s], b = ROUTE[s + 1];
+    const L = Math.hypot(b.x - a.x, b.z - a.z);
+    const nx = -(b.z - a.z) / L, nz = (b.x - a.x) / L;
+    let k = 0;
+    for (let d = 30; d < L - 12; d += 36) {
+      const t = d / L;
+      const side = (k++ % 2 ? 1 : -1) * 4.5;
+      const x = a.x + (b.x - a.x) * t + nx * side, z = a.z + (b.z - a.z) * t + nz * side;
+      if (CAMPS.some((c) => Math.hypot(x - c.x, z - c.z) < 22)) continue;
+      if (heightAt(x, z) < WATER + 0.5) continue;
+      spots.push({ x, z });
+    }
+  }
+  // One box at every camp
+  for (const c of world.camps) {
+    const p = c.local(0.4, 8.6);
+    spots.push({ x: p.x, z: p.z });
+  }
+  const tex = boxTexture();
+  const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: 0.22, roughness: 0.5 });
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, spots.length);
+  mesh.castShadow = true;
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  world.boxes = spots.map((p, i) => ({ ...p, y: heightAt(p.x, p.z), has: true, regrowDay: 0, index: i, phase: i * 1.7 }));
+  const dummy = new THREE.Object3D();
+  const place = (t) => {
+    for (const b of world.boxes) {
+      dummy.position.set(b.x, b.y + 1.0 + Math.sin(t * 2 + b.phase) * 0.18, b.z);
+      dummy.rotation.set(0.15, t * 1.2 + b.phase, 0.1);
+      dummy.scale.setScalar(b.has ? 1 : 0);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(b.index, dummy.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  };
+  place(0);
+  world.updaters.push((dt, t) => place(t));
+}
+
+// ---------------------------------------------------------------- random stuff on the mountain
+function buildProps(scene, world) {
+  world.props = [];
+  const bc = world.camps[0], c1 = world.camps[1], c2 = world.camps[2], c3 = world.camps[3];
+
+  // A giant rubber duck floating in the big lake
+  const L = HF.LAKES[1];
+  const duck = new THREE.Group();
+  const yellow = new THREE.MeshStandardMaterial({ color: '#ffd23a', roughness: 0.35 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(3.2, 24, 16), yellow);
+  body.scale.set(1.25, 0.8, 1);
+  body.position.y = 1.2;
+  const headM = new THREE.Mesh(new THREE.SphereGeometry(1.9, 24, 16), yellow);
+  headM.position.set(2.2, 4.0, 0);
+  const beak = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 10), new THREE.MeshStandardMaterial({ color: '#ff8a00', roughness: 0.4 }));
+  beak.scale.set(1.3, 0.45, 0.9);
+  beak.position.set(4.0, 3.7, 0);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.8, 12), yellow);
+  tail.position.set(-3.9, 2.2, 0);
+  tail.rotation.z = 1.0;
+  duck.add(body, headM, beak, tail);
+  for (const s of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), new THREE.MeshStandardMaterial({ color: '#111', roughness: 0.2 }));
+    eye.position.set(3.4, 4.6, s * 0.95);
+    duck.add(eye);
+  }
+  duck.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  duck.position.set(L.x, WATER - 0.4, L.z);
+  scene.add(duck);
+  world.updaters.push((dt, t) => {
+    duck.position.y = WATER - 0.5 + Math.sin(t * 1.3) * 0.25;
+    duck.rotation.y = t * 0.05;
+    duck.rotation.z = Math.sin(t * 0.9) * 0.05;
+  });
+
+  // Pink lawn flamingos at Base Camp
+  const pink = new THREE.MeshStandardMaterial({ color: '#ff6fae', roughness: 0.5 });
+  const black = new THREE.MeshStandardMaterial({ color: '#202020', roughness: 0.6 });
+  [[4.6, 7.4, 0.4], [5.6, 6.2, -0.5]].forEach(([lx, lz, ry]) => {
+    const f = new THREE.Group();
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10), pink);
+    b.scale.set(1, 0.75, 1.5);
+    b.position.y = 0.95;
+    const neck = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.05, 6, 14, Math.PI * 1.25), pink);
+    neck.rotation.y = Math.PI / 2;
+    neck.position.set(0, 1.3, 0.25);
+    const h = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), pink);
+    h.position.set(0, 1.62, 0.12);
+    const bk = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.2, 6), black);
+    bk.rotation.x = Math.PI / 2 + 0.6;
+    bk.position.set(0, 1.56, 0.22);
+    f.add(b, neck, h, bk);
+    for (const s of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.75, 5), black);
+      leg.position.set(s * 0.06, 0.38, 0);
+      f.add(leg);
+    }
+    const p = bc.local(lx, lz);
+    f.position.set(p.x, heightAt(p.x, p.z), p.z);
+    f.rotation.y = bc.yaw + ry;
+    f.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    scene.add(f);
+  });
+
+  const addProp = (camp, lx, lz, ry, group, r, prop) => {
+    const p = camp.local(lx, lz);
+    group.position.set(p.x, heightAt(p.x, p.z), p.z);
+    group.rotation.y = camp.yaw + ry;
+    group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    scene.add(group);
+    world.colliders.add(p.x, p.z, r);
+    world.props.push({ x: p.x, z: p.z, reach: r + 1.9, usedDay: 0, ...prop });
+  };
+
+  // A comfy couch at Camp 1
+  const couch = new THREE.Group();
+  const fabric = new THREE.MeshStandardMaterial({ color: '#c98a2e', roughness: 0.95 });
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.45, 0.9), fabric);
+  seat.position.y = 0.35;
+  const backR = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.75, 0.25), fabric);
+  backR.position.set(0, 0.85, -0.35);
+  couch.add(seat, backR);
+  for (const s of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.9), fabric);
+    arm.position.set(s * 1.1, 0.55, 0);
+    couch.add(arm);
+    const cush = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.15, 0.75), new THREE.MeshStandardMaterial({ color: '#e0a548', roughness: 0.95 }));
+    cush.position.set(s * 0.5, 0.64, 0.05);
+    couch.add(cush);
+  }
+  addProp(c1, -5.2, 3.2, 1.2, couch, 1.1, { kind: 'couch', text: 'Sit on the couch' });
+
+  // A snack machine at Camp 2
+  const vend = new THREE.Group();
+  const boxM = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.1, 0.8), new THREE.MeshStandardMaterial({ color: '#d8322b', roughness: 0.5 }));
+  boxM.position.y = 1.05;
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.3), new THREE.MeshStandardMaterial({ color: '#bfe6ff', emissive: '#9fd8ff', emissiveIntensity: 0.6, roughness: 0.2 }));
+  glass.position.set(-0.12, 1.25, 0.41);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.22), new THREE.MeshBasicMaterial({ map: canvasTexture(256, 64, (ctx, w, h) => {
+    ctx.fillStyle = '#fff3c4'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#d8322b'; ctx.font = `900 40px ${FONT_STACK}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('SNACKS', w / 2, h / 2 + 2);
+  }) }));
+  sign.position.set(0, 1.98, 0.41);
+  vend.add(boxM, glass, sign);
+  addProp(c2, -5.4, 3.0, 1.0, vend, 0.75, { kind: 'snacks', text: 'Get free snacks' });
+
+  // A toilet way up at Camp 3. Nobody knows why.
+  const toilet = new THREE.Group();
+  const porcelain = new THREE.MeshStandardMaterial({ color: '#f7f8fa', roughness: 0.25 });
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.22, 0.45, 18), porcelain);
+  bowl.position.set(0, 0.23, 0.12);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.06, 8, 20), porcelain);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.set(0, 0.47, 0.12);
+  const tank = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.55, 0.24), porcelain);
+  tank.position.set(0, 0.7, -0.25);
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 18), porcelain);
+  lid.position.set(0, 0.62, -0.12);
+  lid.rotation.x = -1.3;
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.03), new THREE.MeshStandardMaterial({ color: '#c0c7cf', metalness: 0.8, roughness: 0.3 }));
+  handle.position.set(-0.22, 0.88, -0.12);
+  toilet.add(bowl, rim, tank, lid, handle);
+  addProp(c3, -6.4, 0.8, 1.3, toilet, 0.45, { kind: 'toilet', text: 'Flush the toilet' });
+}
+
 // ---------------------------------------------------------------- build
 export function buildWorld(scene, envMap) {
   const world = {
@@ -790,6 +989,8 @@ export function buildWorld(scene, envMap) {
   CAMPS.forEach((c, i) => buildCamp(scene, world, c, i));
   buildSummit(scene, world, envMap);
   buildClouds(scene, world);
+  buildBoxes(scene, world);
+  buildProps(scene, world);
   world.update = (dt, t, env) => {
     for (const u of world.updaters) u(dt, t, env);
   };
@@ -801,11 +1002,14 @@ export function buildWorld(scene, envMap) {
     for (const m of world.mushrooms) {
       if (!m.has && day >= m.regrowDay) { m.has = true; setInstanceVisible(m, true); }
     }
+    for (const b of world.boxes) if (!b.has && day >= b.regrowDay) b.has = true;
   };
   world.resetAll = () => {
     for (const b of world.bushes) { b.has = true; setInstanceVisible(b.berries, true); }
     for (const m of world.mushrooms) { m.has = true; setInstanceVisible(m, true); }
     for (const c of world.camps) { c.crateDay = 0; c.crate.lidPivot.rotation.x = 0; c.visited = c.id === 0; }
+    for (const b of world.boxes) b.has = true;
+    for (const p of world.props) p.usedDay = 0;
   };
   return world;
 }

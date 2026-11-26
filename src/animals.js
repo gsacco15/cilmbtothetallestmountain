@@ -187,6 +187,28 @@ const BUILD = {
 // ------------------------------------------------------------------ behavior
 const tmp = new THREE.Vector3();
 
+// A red marker that floats over animals while you listen with the stethoscope
+let markerMat = null;
+function getMarkerMat() {
+  if (markerMat) return markerMat;
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ff3b4b';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(10, 14); ctx.lineTo(54, 14); ctx.lineTo(32, 54); ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  markerMat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+  return markerMat;
+}
+const MARKER_Y = { bear: 2.7, wolf: 2.0, goat: 2.2, leopard: 1.9, snake: 1.3, eagle: 1.4 };
+
 class Animal {
   constructor(type, x, z, scene) {
     this.type = type;
@@ -219,6 +241,47 @@ class Animal {
       this.pos.y += 28;
       this.vel = new THREE.Vector3();
     }
+    this.spin = 0;
+    this.spinA = 0;
+    this.laughT = 0;
+    this.marker = new THREE.Sprite(getMarkerMat());
+    this.marker.scale.setScalar(0.9);
+    this.marker.position.y = MARKER_Y[type] || 2;
+    this.marker.renderOrder = 999;
+    this.marker.visible = false;
+    this.root.add(this.marker);
+  }
+
+  // Floor cleaner or a banana peel: slip, spin and slide away
+  slip(fromX, fromZ, ctx) {
+    if (this.state === 'flee' || this.removeT >= 0) return false;
+    const dx = this.pos.x - fromX, dz = this.pos.z - fromZ;
+    const d = Math.hypot(dx, dz) || 1;
+    this.knock.set((dx / d) * 16, 0, (dz / d) * 16);
+    this.spin = 1.6;
+    this.hp = 0;
+    this.set('flee');
+    ctx.onScared(this, true);
+    return true;
+  }
+
+  // Rubber chicken: run away
+  scare(ctx) {
+    if (this.state === 'flee' || this.removeT >= 0) return false;
+    this.hp = 0;
+    this.set(this.type === 'eagle' ? 'leave' : 'flee');
+    ctx.onScared(this, true);
+    return true;
+  }
+
+  // Whoopee cushion: too busy laughing to attack
+  laugh(t) {
+    if (this.state === 'flee' || this.removeT >= 0) return false;
+    this.calm = t;
+    this.laughT = t;
+    if (this.type === 'eagle') this.set('leave');
+    else if (this.state !== 'wander') this.set('wander');
+    return true;
   }
 
   set(state) {
@@ -256,6 +319,19 @@ class Animal {
     this.cd -= dt;
     this.calm -= dt;
     this.flash -= dt;
+    this.laughT -= dt;
+    this.marker.visible = ctx.reveal > 0 && this.removeT < 0;
+    if (ctx.peels && this.type !== 'eagle' && this.state !== 'flee') {
+      for (const pl of ctx.peels) {
+        if (pl.used) continue;
+        if (Math.abs(pl.x - this.pos.x) + Math.abs(pl.z - this.pos.z) < 1.8) {
+          pl.used = true;
+          ctx.onPeel(pl, this);
+          this.slip(pl.x - Math.sin(this.yaw), pl.z - Math.cos(this.yaw), ctx);
+          break;
+        }
+      }
+    }
 
     if (this.type === 'eagle') {
       this.updateEagle(dt, ctx, P, canHunt);
@@ -423,8 +499,13 @@ class Animal {
     const hF = heightAt(this.pos.x + fx * half, this.pos.z + fz * half);
     const hB = heightAt(this.pos.x - fx * half, this.pos.z - fz * half);
     const pitch = -Math.atan2(hF - hB, half * 2);
-    this.root.rotation.y = this.yaw;
+    if (this.spin > 0) {
+      this.spin -= dt;
+      this.spinA += dt * 16;
+    }
+    this.root.rotation.y = this.yaw + this.spinA;
     this.root.rotation.x = damp(this.root.rotation.x, clamp(pitch, -0.6, 0.6) - (this.state === 'pounce' ? 0.3 : 0), 8, dt);
+    if (this.laughT > 0) this.root.position.y += Math.abs(Math.sin(ctx.time * 14 + this.gait)) * 0.3;
 
     const sp = this.speed;
     this.gait += dt * (2 + sp * 2.1);
@@ -619,7 +700,7 @@ export class AnimalManager {
     });
   }
 
-  // Swing of the ice axe: hits everything in a cone in front of the player
+  // Swing of the trekking pole: hits everything in a cone in front of the player
   swing(origin, yaw, reach, dmg, ctx) {
     const hits = [];
     for (const a of this.list) {
@@ -634,6 +715,22 @@ export class AnimalManager {
       if (a.hit(dmg, origin.x, origin.z, ctx)) hits.push(a);
     }
     return hits;
+  }
+
+  // Run fn on every active animal within radius r (and optionally in a cone)
+  near(P, r, fn, yaw = null, cone = Math.PI) {
+    let n = 0;
+    for (const a of this.list) {
+      if (a.removeT >= 0) continue;
+      const dx = a.pos.x - P.x, dz = a.pos.z - P.z;
+      if (Math.hypot(dx, dz) > r) continue;
+      if (yaw !== null) {
+        const ang = Math.abs(((Math.atan2(dx, dz) - yaw + Math.PI * 3) % TAU) - Math.PI);
+        if (ang > cone && Math.hypot(dx, dz) > 2) continue;
+      }
+      if (fn(a)) n++;
+    }
+    return n;
   }
 
   // Closest animal that is hunting the player (for HUD warnings)

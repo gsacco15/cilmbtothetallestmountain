@@ -9,6 +9,7 @@ import { AudioFX } from './audio.js';
 import { Input, LOOK_SPEED, clampPitch } from './input.js';
 import { UI } from './ui.js';
 import { Player } from './player.js';
+import { STUFF, randomStuff } from './stuff.js';
 import { clamp, lerp, damp, smoothstep, formatMeters, TAU } from './util.js';
 
 const { CAMPS, SUMMIT, heightAt, inSafeZone, nearestPond, isSnowAt, altitudeMeters, progressFromHeight, WATER } = HF;
@@ -63,8 +64,8 @@ class Game {
     this.save = loadSave();
     this.choice = this.save.choice === 'rielle' ? 'rielle' : 'daddy';
     this.custom = {
-      daddy: { skin: CHARACTERS.daddy.colors.skin, ...(this.save.custom?.daddy || {}) },
-      rielle: { skin: CHARACTERS.rielle.colors.skin, hair: CHARACTERS.rielle.colors.hair, ...(this.save.custom?.rielle || {}) },
+      daddy: { skin: CHARACTERS.daddy.colors.skin, ...(this.save.looks?.daddy || {}) },
+      rielle: { skin: CHARACTERS.rielle.colors.skin, hair: CHARACTERS.rielle.colors.hair, ...(this.save.looks?.rielle || {}) },
     };
     this.state = 'loading';
     this.hour = 17.4;
@@ -113,6 +114,30 @@ class Game {
     this.scene.add(ring);
 
     this.buildConfetti();
+    this.buildPuffs();
+    this.peels = [];
+    this.reveal = 0;
+    this.confettiT = 0;
+    this.flushes = 0;
+    this.hooks = {
+      hurtPlayer: (dmg, a, kx, kz, knock) => this.onHurt(dmg, a, kx, kz, knock),
+      onAlert: (a) => {
+        this.audio.play(ALERT_SOUND[a.type]);
+        this.ui.toast(`${a.cfg.label} spotted you!`, 'danger', `alert-${a.type}`, 9);
+      },
+      onScared: (a, silly) => {
+        this.run.scared += 1;
+        if (silly) return;
+        this.audio.play('scared');
+        this.ui.toast(`You scared off ${a.cfg.label.toLowerCase()}!`, 'good', 'scared', 0.5);
+      },
+      onPeel: (pl, a) => {
+        this.scene.remove(pl.mesh);
+        this.audio.play('slip');
+        this.ui.toast(`${a.cfg.label} slipped on the banana peel!`, 'stuff');
+      },
+      onSound: (n) => this.audio.play(n),
+    };
 
     this.animals = new AnimalManager(this.scene);
     this.audio = new AudioFX();
@@ -155,7 +180,7 @@ class Game {
     $('honk-btn').addEventListener('click', () => this.honk());
     $('mute-btn').addEventListener('click', () => this.toggleMute());
     for (const slot of document.querySelectorAll('.slot')) {
-      slot.addEventListener('click', () => this.useItem(slot.dataset.item));
+      slot.addEventListener('click', () => (slot.dataset.item === 'stuff' ? this.useStuff() : this.useItem(slot.dataset.item)));
     }
     this.input.bindTouch({
       joyZone: $('joy-zone'),
@@ -212,7 +237,8 @@ class Game {
 
   persist() {
     this.save.choice = this.choice;
-    this.save.custom = this.custom;
+    this.save.looks = this.custom;
+    delete this.save.custom;
     writeSave(this.save);
   }
 
@@ -269,9 +295,13 @@ class Game {
     this.ui.show('screen-title', true);
     this.ui.clearToasts();
     this.hour = 17.4;
+    this.clearPeels();
     for (const [id, rig] of Object.entries(this.rigs)) {
       rig.root.visible = true;
       rig.root.rotation.set(0, 0, 0);
+      rig.setGear({});
+      rig.medal.visible = false;
+      if (rig.hat) rig.hat.visible = true;
       const p = this.basePoint(9.5, id === 'daddy' ? 0.6 : 2.5);
       rig.root.position.copy(p);
     }
@@ -334,6 +364,11 @@ class Game {
     this.player.rig.root.visible = true;
     this.player.cheer = false;
     this.player.wave = false;
+    this.clearPeels();
+    this.reveal = 0;
+    this.confettiT = 0;
+    this.flushes = 0;
+    if (this.def.id === 'rielle') this.player.stuff = randomStuff();
     // The other climber stays at Base Camp to cheer you on
     const n = bc.local(1.5, 6.6);
     n.y = heightAt(n.x, n.z);
@@ -357,7 +392,9 @@ class Game {
       [0.4, again ? 'Back at the bottom. Try again!' : `Good luck! ${other} will wait at Base Camp.`, 'gold'],
       [3.2, 'Open the supply crate before you leave.', ''],
       [7, 'Follow the orange flags. The gold light is the summit.', ''],
+      [11, "Purple boxes are full of Rielle's random stuff. Somehow it all helps!", 'stuff'],
     ];
+    if (this.player.stuff) tips.splice(1, 0, [1.8, `You packed: ${STUFF[this.player.stuff].name}. Trust me, it'll help. (Press 5)`, 'stuff']);
     if (this.tipTimers) this.tipTimers.forEach(clearTimeout);
     this.tipTimers = tips.map(([d, text, kind]) => setTimeout(() => { if (this.state === 'playing' || this.state === 'intro') this.ui.toast(text, kind); }, d * 1000));
     if (again) this.input.requestLock();
@@ -470,7 +507,13 @@ class Game {
     this.player.yaw = -Math.PI / 2;
     this.player.cheer = true;
     this.player.vel.set(0, 0, 0);
-    this.showConfetti();
+    for (const k of Object.keys(this.player.buffs)) this.player.buffs[k] = 0;
+    this.player.rig.medal.visible = true;
+    // Hat off at the top
+    if (this.player.rig.hat) this.player.rig.hat.visible = false;
+    this.clearPeels();
+    this.reveal = 0;
+    this.showConfetti(car);
   }
 
   showWin() {
@@ -480,7 +523,7 @@ class Game {
       kind: 'win',
       eyebrow: 'Summit · 8,849 m',
       title: 'You made it to the top!',
-      sub: `The Lamborghini is yours, ${this.def.name}!`,
+      sub: `The Lamborghini is yours, ${this.def.name}! And the summit medal too.`,
       stats: this.endStats().filter(([k]) => k !== 'Highest point'),
       primary: 'Play again',
       secondary: 'Main menu',
@@ -554,6 +597,11 @@ class Game {
   findInteraction() {
     const p = this.player.pos;
     const d2 = (a) => Math.hypot(p.x - a.x, p.z - a.z);
+    for (const pr of this.world.props) {
+      if (d2(pr) > pr.reach) continue;
+      if (pr.kind === 'snacks' && pr.usedDay === this.day) return { text: 'Snack machine is empty until tomorrow', enabled: false };
+      return { text: pr.text, enabled: true, act: () => this.useProp(pr) };
+    }
     for (const c of this.world.camps) {
       if (d2(c) > 30) continue;
       if (d2(c.cratePos) < 2.3) {
@@ -662,6 +710,223 @@ class Game {
     st.warmth = Math.max(0, st.warmth - 6);
     this.audio.play('snow');
     this.ui.toast('Snow melts in your mouth. +12 water, -6 warmth', '', 'snow', 1.5);
+  }
+
+  useProp(pr) {
+    const p = this.player;
+    const st = p.stats;
+    if (pr.kind === 'couch') {
+      st.stamina = 100;
+      st.warmth = Math.min(100, st.warmth + 15);
+      this.audio.play('pickup');
+      this.ui.toast('So comfy. Who carried a couch up here? Probably Rielle.', 'stuff', 'couch', 3);
+    } else if (pr.kind === 'snacks') {
+      pr.usedDay = this.day;
+      st.food = Math.min(100, st.food + 25);
+      st.water = Math.min(100, st.water + 15);
+      this.audio.play('crate');
+      this.ui.toast('Free snacks! +25 food, +15 water', 'good');
+    } else if (pr.kind === 'toilet') {
+      this.flushes += 1;
+      this.audio.play('flush');
+      if (this.flushes % 3 === 0 && !p.stuff) {
+        p.stuff = randomStuff(this.lastStuffKey);
+        this.lastStuffKey = p.stuff;
+        setTimeout(() => this.audio.play('box'), 900);
+        this.ui.toast(`The toilet gurgles... and spits out ${STUFF[p.stuff].name.toLowerCase()}!`, 'stuff');
+      } else {
+        const lines = [
+          'Flushed. Nothing happened. Why is there a toilet up here?',
+          'Flushed again. Still a mystery.',
+          'Rielle said the toilet would help. Keep flushing?',
+        ];
+        this.ui.toast(lines[(this.flushes - 1) % lines.length], 'stuff');
+      }
+    }
+  }
+
+  pickUpBoxes() {
+    const p = this.player;
+    for (const b of this.world.boxes) {
+      if (!b.has) continue;
+      if (Math.abs(b.x - p.pos.x) > 2 || Math.abs(b.z - p.pos.z) > 2) continue;
+      if (Math.hypot(b.x - p.pos.x, b.z - p.pos.z) > 1.7 || Math.abs(b.y - p.pos.y) > 3) continue;
+      if (p.stuff) {
+        this.ui.toast(`Hands full! Use your ${STUFF[p.stuff].name.toLowerCase()} first (press 5).`, '', 'full', 4);
+        continue;
+      }
+      b.has = false;
+      b.regrowDay = this.day + 1;
+      p.stuff = randomStuff(this.lastStuffKey);
+      this.lastStuffKey = p.stuff;
+      this.audio.play('box');
+      const name = STUFF[p.stuff].name;
+      this.ui.toast(this.def.id === 'rielle' ? `Found: ${name}. Told you it would help!` : `From Rielle's box: ${name}! Rielle says it will help.`, 'stuff');
+    }
+  }
+
+  useStuff() {
+    if (this.state !== 'playing') return;
+    const p = this.player;
+    const key = p.stuff;
+    if (!key) {
+      this.ui.toast("No random stuff yet. Walk into one of Rielle's purple boxes.", '', 'nostuff', 3);
+      return;
+    }
+    p.stuff = null;
+    p.buffs.use = 0.6;
+    const pos = p.pos;
+    const st = p.stats;
+    const hooks = this.hooks;
+    let msg = STUFF[key].use;
+    switch (key) {
+      case 'cleaner': {
+        this.audio.play('spray');
+        this.spawnPuffs(pos, p.yaw, '#e6f8ff', 30, 9);
+        const n = this.animals.near(pos, 12, (a) => a.slip(pos.x, pos.z, hooks), p.yaw, 1.3);
+        if (n) setTimeout(() => this.audio.play('slip'), 200);
+        else msg = 'Psssht! Lemon fresh! The mountain has never been this clean.';
+        break;
+      }
+      case 'stethoscope':
+        this.reveal = 30;
+        st.health = Math.min(p.maxHealth, st.health + 10);
+        this.audio.play('heartbeat');
+        break;
+      case 'chicken': {
+        this.audio.play('squawk');
+        const n = this.animals.near(pos, 24, (a) => a.scare(hooks));
+        if (!n) msg = 'SQUAWK! Nothing was around, but you feel braver.';
+        break;
+      }
+      case 'banana':
+        st.food = Math.min(100, st.food + 15);
+        this.dropPeel(pos, p.yaw);
+        this.audio.play('eat');
+        break;
+      case 'hotsauce':
+        st.warmth = Math.min(100, st.warmth + 60);
+        this.audio.play('sizzle');
+        this.spawnPuffs(pos, p.yaw, '#ff7a2a', 18, 6);
+        break;
+      case 'umbrella':
+        p.buffs.umbrella = 2;
+        p.buffs.umbrellaT = 90;
+        this.audio.play('umbrella');
+        break;
+      case 'bubblewrap':
+        p.buffs.bubble = 25;
+        st.stamina = 100;
+        this.audio.play('bubble');
+        break;
+      case 'pizza':
+        st.food = Math.min(100, st.food + 40);
+        st.warmth = Math.min(100, st.warmth + 5);
+        this.audio.play('eat');
+        break;
+      case 'whoopee': {
+        this.audio.play('pfft');
+        const n = this.animals.near(pos, 32, (a) => a.laugh(25));
+        if (!n) msg = 'PFFFT! Nobody heard it. Probably for the best.';
+        break;
+      }
+      case 'skates':
+        p.buffs.skates = 20;
+        this.audio.play('whee');
+        break;
+      case 'pan':
+        p.buffs.pan = 30;
+        this.audio.play('bonk');
+        break;
+      case 'popper':
+        this.audio.play('pop');
+        this.showConfetti(v1.set(pos.x, pos.y + 1, pos.z), 6, 5);
+        this.confettiT = 3.5;
+        break;
+      default:
+        break;
+    }
+    this.ui.toast(msg, 'stuff');
+  }
+
+  dropPeel(pos, yaw) {
+    const g = new THREE.Group();
+    const yellow = new THREE.MeshStandardMaterial({ color: '#ffd93b', roughness: 0.5 });
+    for (let k = 0; k < 4; k++) {
+      const strip = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 6), yellow);
+      strip.scale.set(0.45, 0.18, 1.4);
+      const a = (k / 4) * TAU + 0.4;
+      strip.position.set(Math.cos(a) * 0.22, 0.05, Math.sin(a) * 0.22);
+      strip.rotation.y = -a + Math.PI / 2;
+      g.add(strip);
+    }
+    const top = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshStandardMaterial({ color: '#6b4a2f' }));
+    top.position.y = 0.08;
+    g.add(top);
+    const x = pos.x - Math.sin(yaw) * 1.2, z = pos.z - Math.cos(yaw) * 1.2;
+    g.position.set(x, heightAt(x, z), z);
+    g.scale.setScalar(1.4);
+    this.scene.add(g);
+    this.peels.push({ x, z, mesh: g, t: 150, used: false });
+  }
+
+  clearPeels() {
+    for (const pl of this.peels || []) this.scene.remove(pl.mesh);
+    this.peels = [];
+  }
+
+  // Little puffs for floor cleaner spray and hot sauce breath
+  buildPuffs() {
+    const n = 64;
+    this.puffs = new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(0.22, 1),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false }),
+      n,
+    );
+    this.puffs.frustumCulled = false;
+    this.puffData = [];
+    const c = new THREE.Color(1, 1, 1);
+    for (let i = 0; i < n; i++) {
+      this.puffs.setColorAt(i, c);
+      this.puffData.push({ p: new THREE.Vector3(), v: new THREE.Vector3(), life: 0, max: 1 });
+    }
+    this.scene.add(this.puffs);
+    this.puffNext = 0;
+    this.updatePuffs(0);
+  }
+
+  spawnPuffs(pos, yaw, color, count, speed) {
+    const c = new THREE.Color(color);
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    for (let k = 0; k < count; k++) {
+      const i = this.puffNext;
+      this.puffNext = (this.puffNext + 1) % this.puffData.length;
+      const d = this.puffData[i];
+      d.p.set(pos.x + fx * 0.7, pos.y + 1.35, pos.z + fz * 0.7);
+      const spread = (Math.random() - 0.5) * 0.9;
+      const s = speed * (0.6 + Math.random() * 0.6);
+      d.v.set((fx * Math.cos(spread) - fz * Math.sin(spread)) * s, (Math.random() - 0.3) * 2, (fz * Math.cos(spread) + fx * Math.sin(spread)) * s);
+      d.max = d.life = 0.6 + Math.random() * 0.5;
+      this.puffs.setColorAt(i, c);
+    }
+    this.puffs.instanceColor.needsUpdate = true;
+  }
+
+  updatePuffs(dt) {
+    const m = this.puffDummy || (this.puffDummy = new THREE.Object3D());
+    this.puffData.forEach((d, i) => {
+      if (d.life > 0) {
+        d.life -= dt;
+        d.p.addScaledVector(d.v, dt);
+        d.v.multiplyScalar(Math.exp(-dt * 2.5));
+      }
+      const k = d.life > 0 ? 0.25 + (1 - d.life / d.max) * 1.3 : 0;
+      m.position.copy(d.p);
+      m.scale.setScalar(k);
+      m.updateMatrix();
+      this.puffs.setMatrixAt(i, m.matrix);
+    });
+    this.puffs.instanceMatrix.needsUpdate = true;
   }
 
   useItem(key) {
@@ -796,25 +1061,19 @@ class Game {
       progress: prog,
       time: this.time,
       spawning: !intro && this.grace <= 0,
-      hurtPlayer: (dmg, a, kx, kz, knock) => this.onHurt(dmg, a, kx, kz, knock),
-      onAlert: (a) => {
-        this.audio.play(ALERT_SOUND[a.type]);
-        this.ui.toast(`${a.cfg.label} spotted you!`, 'danger', `alert-${a.type}`, 9);
-      },
-      onScared: (a) => {
-        this.run.scared += 1;
-        this.audio.play('scared');
-        this.ui.toast(`You scared off ${a.cfg.label.toLowerCase()}!`, 'good', 'scared', 0.5);
-      },
-      onSound: (n) => this.audio.play(n),
+      reveal: this.reveal,
+      peels: this.peels,
+      ...this.hooks,
     };
     this.grace -= dt;
+    this.reveal = Math.max(0, this.reveal - dt);
 
     if (!intro) {
       if (p.hitMoment) {
-        const hits = this.animals.swing(p.pos, p.yaw, 2.3, p.s.damage, ctx);
+        const pan = p.buffs.pan > 0;
+        const hits = this.animals.swing(p.pos, p.yaw, pan ? 2.6 : 2.3, p.s.damage * (pan ? 3 : 1), ctx);
         if (hits.length) {
-          this.audio.play('thwack');
+          this.audio.play(pan ? 'bonk' : 'thwack');
           this.shake = Math.max(this.shake, 0.15);
         }
       }
@@ -831,6 +1090,8 @@ class Game {
       }
       const keys = [['Digit1', 'ration'], ['Digit2', 'water'], ['Digit3', 'firstaid'], ['Digit4', 'warmer']];
       for (const [code, item] of keys) if (inp.consume(code)) this.useItem(item);
+      if (inp.consume('Digit5') || inp.consume('KeyG')) this.useStuff();
+      this.pickUpBoxes();
 
       // Camps
       const camp = safe ? this.world.camps[safe.id] : null;
@@ -852,6 +1113,17 @@ class Game {
 
     this.animals.update(dt, ctx);
     this.updateNPC(dt);
+    for (const pl of this.peels) {
+      pl.t -= dt;
+      if (pl.t <= 0 && !pl.used) { pl.used = true; this.scene.remove(pl.mesh); }
+    }
+    this.peels = this.peels.filter((pl) => !pl.used);
+    this.updatePuffs(dt);
+    if (this.confettiT > 0) {
+      this.confettiT -= dt;
+      this.updateConfetti(dt);
+      if (this.confettiT <= 0) this.hideConfetti();
+    }
 
     // HUD
     const threats = this.animals.threats(p.pos).sort((a, b) => a.pos.distanceTo(p.pos) - b.pos.distanceTo(p.pos));
@@ -859,9 +1131,21 @@ class Game {
     const next = this.nextTarget();
     this.ui.updateBars(p.stats, p.maxHealth);
     this.ui.updateInventory(p.inv);
+    this.ui.updateStuff(p.stuff);
+    const b = p.buffs;
+    const buffs = [];
+    if (b.skates > 0) buffs.push({ key: 'skates', label: 'Skates', t: b.skates });
+    if (b.pan > 0) buffs.push({ key: 'pan', label: 'Pan', t: b.pan });
+    if (b.bubble > 0) buffs.push({ key: 'bubblewrap', label: 'No tired', t: b.bubble });
+    if (b.umbrella > 0) buffs.push({ key: 'umbrella', label: `Umbrella \u00D7${b.umbrella}`, t: null });
+    if (this.reveal > 0) buffs.push({ key: 'stethoscope', label: 'Listening', t: this.reveal });
+    this.ui.updateBuffs(buffs);
     this.ui.updateClock(this.day, this.hour, this.isNight());
     this.ui.updateAltitude(alt, air * 100, next, Math.hypot(next.x - p.pos.x, next.z - p.pos.z));
-    this.ui.updateCompass(this.camYaw, p.pos, next, threats);
+    const heard = this.reveal > 0
+      ? this.animals.list.filter((a) => a.removeT < 0).sort((a, c) => a.pos.distanceTo(p.pos) - c.pos.distanceTo(p.pos))
+      : threats;
+    this.ui.updateCompass(this.camYaw, p.pos, next, heard);
     this.ui.updateGauge(alt, this.run.best, this.world.camps.map((c) => c.visited));
     this.ui.updateEffects(dt, p.stats.health / p.maxHealth, p.stats.warmth < 25 ? (25 - p.stats.warmth) / 25 * 0.8 : 0);
 
@@ -885,6 +1169,16 @@ class Game {
 
   onHurt(dmg, animal, kx, kz, knock) {
     if (this.state !== 'playing') return;
+    const pb = this.player.buffs;
+    if (pb.umbrella > 0 && this.player.invuln <= 0) {
+      pb.umbrella -= 1;
+      if (pb.umbrella <= 0) pb.umbrellaT = 0;
+      this.player.invuln = 0.6;
+      animal.knock.set(-kx * 10, 0, -kz * 10);
+      this.audio.play('block');
+      this.ui.toast(pb.umbrella > 0 ? 'The umbrella blocked it! 1 block left.' : 'The umbrella blocked it! Now it is all bent.', 'stuff');
+      return;
+    }
     if (this.player.hurt(dmg, animal.type, kx, kz, knock)) {
       this.audio.play('hurt');
       this.ui.hurt(0.65);
@@ -977,7 +1271,7 @@ class Game {
     p.update(dt, { x: 0, z: 0, len: 0 }, false, false, this.camYaw, this.world.colliders, []);
     this.animals.update(dt, {
       playerPos: p.pos, playerAlive: false, playerSafe: true, night: this.sky.night, progress: 0, time: this.time,
-      spawning: false, hurtPlayer: () => {}, onAlert: () => {}, onScared: () => {}, onSound: () => {},
+      spawning: false, reveal: 0, peels: [], hurtPlayer: () => {}, onAlert: () => {}, onScared: () => {}, onPeel: () => {}, onSound: () => {},
     });
     this.updateWorld(dt, p.pos, progressFromHeight(p.pos.y));
     this.camPitch = damp(this.camPitch, 0.9, 1.5, dt);
@@ -1039,10 +1333,11 @@ class Game {
     this.dummy = new THREE.Object3D();
   }
 
-  showConfetti() {
-    const car = this.world.summit.group.position;
+  showConfetti(center, spread = 16, height = 14) {
+    this.confettiCenter = center.clone();
+    this.confettiHeight = height;
     for (const d of this.confettiData) {
-      d.p.set(car.x + (Math.random() - 0.5) * 16, car.y + 4 + Math.random() * 14, car.z + (Math.random() - 0.5) * 16);
+      d.p.set(center.x + (Math.random() - 0.5) * spread, center.y + 2 + Math.random() * height, center.z + (Math.random() - 0.5) * spread);
       d.v.set((Math.random() - 0.5) * 2, -1 - Math.random() * 1.5, (Math.random() - 0.5) * 2);
       d.r.set(Math.random() * TAU, Math.random() * TAU, 0);
     }
@@ -1055,13 +1350,13 @@ class Game {
 
   updateConfetti(dt) {
     if (!this.confetti.visible) return;
-    const car = this.world.summit.group.position;
+    const car = this.confettiCenter;
     this.confettiData.forEach((d, i) => {
       d.p.addScaledVector(d.v, dt);
       d.p.x += Math.sin(this.time * 2 + i) * dt * 0.6;
       d.r.x += dt * d.s;
       d.r.y += dt * d.s * 0.7;
-      if (d.p.y < car.y) d.p.y = car.y + 14 + Math.random() * 4;
+      if (d.p.y < car.y) d.p.y = car.y + this.confettiHeight + Math.random() * 4;
       this.dummy.position.copy(d.p);
       this.dummy.rotation.copy(d.r);
       this.dummy.updateMatrix();

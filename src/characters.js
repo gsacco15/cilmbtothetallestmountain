@@ -1,11 +1,13 @@
 // The two climbers, built from simple shapes so they animate smoothly.
-//   Daddy: 6'2", bald, Navy doctor in a navy jacket with aviators.
-//   Dr. Rielle (a.k.a. Mrs. Rielle): doctor in a white coat with a ponytail.
+//   Daddy: 6'2", bald Navy doctor. Black beanie with a headlamp, short beard,
+//          black fleece, khaki pants, gray gloves and two blue trekking poles.
+//   Dr. Rielle (a.k.a. Mrs. Rielle): doctor with long dark hair, a tan sherpa
+//          jacket over a lavender layer and olive leggings.
 import * as THREE from 'three';
 import { clamp, damp, canvasTexture, FONT_STACK } from './util.js';
 
-export const SKIN_TONES = ['#f3cfb3', '#e2ad84', '#c68a5e', '#9a6440', '#6b4128'];
-export const HAIR_COLORS = ['#5a3620', '#1e1a18', '#d4ad5e', '#9c3b1f'];
+export const SKIN_TONES = ['#f1cdb3', '#e2ad84', '#c68a5e', '#9a6440', '#6b4128'];
+export const HAIR_COLORS = ['#33201a', '#5a3620', '#1e1a18', '#d4ad5e', '#9c3b1f'];
 
 export const CHARACTERS = {
   daddy: {
@@ -14,9 +16,12 @@ export const CHARACTERS = {
     role: 'Navy Doctor',
     blurb: '6\'2" Navy doctor',
     heightM: 1.88,
-    perks: ['30% more health', 'Big ice-axe swing', 'Longer stride'],
+    perks: ['30% more health', 'Big pole swing', 'Longer stride'],
     stats: { maxHealth: 130, damage: 1.6, speed: 1.07, stamina: 1.0, heal: 1.0, hunger: 1.1, regen: 1.0 },
-    colors: { skin: SKIN_TONES[1], top: '#1d3557', sleeve: '#1d3557', pants: '#3b4049', boots: '#5a3b22', pack: '#d2561c', trim: '#f2c230' },
+    colors: {
+      skin: SKIN_TONES[0], top: '#1b1c20', sleeve: '#1b1c20', pants: '#c3b290', boots: '#3d332a', pack: '#d2561c',
+      gloves: '#8d9196', beanie: '#16171a', collar: '#c3c8cd', beard: '#6e523e', pole: '#2456d6',
+    },
   },
   rielle: {
     id: 'rielle',
@@ -25,9 +30,12 @@ export const CHARACTERS = {
     role: 'Doctor',
     blurb: 'a.k.a. Mrs. Rielle',
     heightM: 1.68,
-    perks: ['First aid heals double', 'Extra stamina', 'Heals faster on the move'],
+    perks: ['First aid heals double', 'Extra stamina', 'Brings random stuff'],
     stats: { maxHealth: 100, damage: 1.0, speed: 1.0, stamina: 1.4, heal: 2.0, hunger: 1.0, regen: 2.0 },
-    colors: { skin: SKIN_TONES[0], top: '#f4f6f8', sleeve: '#f4f6f8', pants: '#2aa79b', boots: '#7a4a2a', pack: '#d63a4a', hair: HAIR_COLORS[0], scrubs: '#2aa79b' },
+    colors: {
+      skin: SKIN_TONES[0], top: '#b59d76', sleeve: '#b59d76', pants: '#7b8366', boots: '#ece9e2', pack: '#8fb08a',
+      hair: HAIR_COLORS[0], layer: '#c8b7e6', pocket: '#9a835f', pole: '#9b84d8',
+    },
   },
 };
 
@@ -56,7 +64,7 @@ function nameTape(text, bg, fg) {
 }
 
 function anchorPatch() {
-  return canvasTexture(128, 128, (ctx, w, h) => {
+  return canvasTexture(128, 128, (ctx) => {
     ctx.fillStyle = '#14284a';
     ctx.beginPath();
     ctx.arc(64, 64, 62, 0, Math.PI * 2);
@@ -79,6 +87,69 @@ function anchorPatch() {
   });
 }
 
+// Fluffy bumps for the sherpa jacket
+let sherpaTex = null;
+function sherpaBump() {
+  if (sherpaTex) return sherpaTex;
+  sherpaTex = canvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) {
+      const v = 90 + Math.floor(Math.random() * 120);
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.beginPath();
+      ctx.arc(Math.random() * w, Math.random() * h, 2 + Math.random() * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+  sherpaTex.colorSpace = THREE.NoColorSpace;
+  sherpaTex.wrapS = sherpaTex.wrapT = THREE.RepeatWrapping;
+  sherpaTex.repeat.set(3, 3);
+  return sherpaTex;
+}
+
+let medalTex = null;
+function medalFace() {
+  if (medalTex) return medalTex;
+  medalTex = canvasTexture(128, 128, (ctx) => {
+    ctx.fillStyle = '#c9ced4';
+    ctx.beginPath();
+    ctx.arc(64, 64, 63, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#7d858e';
+    ctx.beginPath();
+    ctx.moveTo(18, 88); ctx.lineTo(52, 36); ctx.lineTo(68, 58); ctx.lineTo(82, 42); ctx.lineTo(110, 88);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(44, 48); ctx.lineTo(52, 36); ctx.lineTo(60, 48);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#3a4048';
+    ctx.font = `900 17px ${FONT_STACK}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('8,849 M', 64, 108);
+  });
+  return medalTex;
+}
+
+// A trekking pole held at the grip; the shaft points along the hand's -y
+function makePole(color, u, parent) {
+  const g = new THREE.Group();
+  parent.add(g);
+  const shaftMat = std(color, { metalness: 0.6, roughness: 0.35 });
+  const dark = std('#1a1b1e', { roughness: 0.8 });
+  mesh(new THREE.CylinderGeometry(0.022 * u, 0.02 * u, 0.13 * u, 10), dark, g, 0, 0.0, 0);
+  mesh(new THREE.TorusGeometry(0.03 * u, 0.005 * u, 5, 12), dark, g, 0, 0.07 * u, 0).rotation.y = Math.PI / 2;
+  mesh(new THREE.CylinderGeometry(0.012 * u, 0.012 * u, 0.4 * u, 8), shaftMat, g, 0, -0.26 * u, 0);
+  mesh(new THREE.CylinderGeometry(0.009 * u, 0.009 * u, 0.42 * u, 8), shaftMat, g, 0, -0.66 * u, 0);
+  mesh(new THREE.CylinderGeometry(0.014 * u, 0.014 * u, 0.03 * u, 8), dark, g, 0, -0.46 * u, 0);
+  mesh(new THREE.CylinderGeometry(0.035 * u, 0.035 * u, 0.006 * u, 12), dark, g, 0, -0.8 * u, 0);
+  mesh(new THREE.ConeGeometry(0.008 * u, 0.04 * u, 6), std('#b9c0c8', { metalness: 0.9 }), g, 0, -0.89 * u, 0).rotation.x = Math.PI;
+  return g;
+}
+
 export function buildCharacter(def, custom = {}) {
   const colors = { ...def.colors, ...custom };
   const u = def.heightM / 1.8;
@@ -86,23 +157,21 @@ export function buildCharacter(def, custom = {}) {
   const sw = isDaddy ? 1.38 : 1.12; // shoulder width factor
 
   const mats = {
-    skin: std(colors.skin, { roughness: isDaddy ? 0.38 : 0.6 }),
-    top: std(colors.top, { roughness: 0.8 }),
-    sleeve: std(colors.sleeve, { roughness: 0.8 }),
-    pants: std(colors.pants, { roughness: 0.85 }),
+    skin: std(colors.skin, { roughness: isDaddy ? 0.4 : 0.6 }),
+    top: isDaddy ? std(colors.top, { roughness: 0.95 }) : std(colors.top, { roughness: 1, bumpMap: sherpaBump(), bumpScale: 3 }),
+    pants: std(colors.pants, { roughness: isDaddy ? 0.85 : 0.6 }),
     boots: std(colors.boots, { roughness: 0.7 }),
     pack: std(colors.pack, { roughness: 0.7 }),
+    hands: isDaddy ? std(colors.gloves, { roughness: 0.95 }) : null,
     dark: std('#1b1d21', { roughness: 0.5 }),
     eye: std('#2a1d14', { roughness: 0.3 }),
     metal: std('#9aa3ad', { metalness: 0.8, roughness: 0.3 }),
-    gold: std('#f2c230', { metalness: 0.9, roughness: 0.3 }),
     white: std('#ffffff'),
-    hair: std(colors.hair || '#333', { roughness: 0.7, side: THREE.DoubleSide }),
-    lens: std('#121417', { metalness: 0.9, roughness: 0.08 }),
+    hair: std(colors.hair || colors.beard || '#333', { roughness: 0.75, side: THREE.DoubleSide }),
     cheek: std('#f08f8f', { roughness: 0.8 }),
-    scrubs: std(colors.scrubs || '#2aa79b'),
-    axe: std('#1f4fb0', { roughness: 0.5 }),
+    layer: std(colors.layer || colors.collar || '#cccccc', { roughness: 0.7 }),
   };
+  if (!mats.hands) mats.hands = mats.skin;
 
   const root = new THREE.Group();
   const hips = new THREE.Group();
@@ -117,6 +186,8 @@ export function buildCharacter(def, custom = {}) {
   torso.scale.set(sw, 1, 0.72);
 
   mesh(new THREE.CylinderGeometry(0.055 * u, 0.062 * u, 0.12 * u, 10), mats.skin, spine, 0, 0.58 * u, 0);
+  // Collar of the layer underneath (gray for Daddy, lavender for Rielle)
+  mesh(new THREE.CylinderGeometry(0.068 * u, 0.078 * u, 0.06 * u, 14), mats.layer, spine, 0, 0.545 * u, 0);
 
   // Head
   const head = new THREE.Group();
@@ -128,49 +199,74 @@ export function buildCharacter(def, custom = {}) {
   mesh(new THREE.SphereGeometry(0.022 * u, 10, 8), mats.skin, head, 0, -0.012 * u, fz + 0.012 * u).scale.set(0.8, 1, 1);
   for (const s of [-1, 1]) {
     mesh(new THREE.SphereGeometry(0.03 * u, 10, 8), mats.skin, head, s * 0.112 * u, 0, 0).scale.set(0.45, 1, 0.75);
+    mesh(new THREE.SphereGeometry(0.016 * u, 10, 8), mats.eye, head, s * 0.042 * u, 0.02 * u, fz - 0.004 * u);
+    mesh(new THREE.SphereGeometry(0.006 * u, 6, 4), mats.white, head, s * 0.038 * u, 0.026 * u, fz + 0.01 * u);
   }
-  const smile = mesh(new THREE.TorusGeometry(0.032 * u, 0.0065 * u, 6, 14, Math.PI), mats.dark, head, 0, -0.052 * u, fz - 0.002 * u);
-  smile.rotation.z = Math.PI;
 
+  let hat = null;
+  let lamp;
   if (isDaddy) {
-    // Aviator sunglasses and a gold bridge
+    const beardMat = std(colors.beard, { roughness: 1 });
     for (const s of [-1, 1]) {
-      const lens = mesh(new THREE.SphereGeometry(0.034 * u, 14, 10), mats.lens, head, s * 0.045 * u, 0.02 * u, fz - 0.004 * u);
-      lens.scale.set(1.15, 0.85, 0.35);
-      const arm = mesh(new THREE.BoxGeometry(0.006 * u, 0.006 * u, 0.1 * u), mats.gold, head, s * 0.09 * u, 0.028 * u, 0.06 * u);
-      arm.rotation.y = s * 0.1;
+      mesh(new THREE.BoxGeometry(0.045 * u, 0.011 * u, 0.012 * u), beardMat, head, s * 0.044 * u, 0.053 * u, fz - 0.006 * u).rotation.z = s * -0.1;
     }
-    mesh(new THREE.BoxGeometry(0.03 * u, 0.006 * u, 0.006 * u), mats.gold, head, 0, 0.038 * u, fz + 0.004 * u);
-    for (const s of [-1, 1]) {
-      mesh(new THREE.BoxGeometry(0.045 * u, 0.01 * u, 0.012 * u), mats.dark, head, s * 0.045 * u, 0.065 * u, fz - 0.01 * u).rotation.z = s * -0.12;
-    }
+    // Short beard along the jaw and chin, plus a mustache
+    const beard = mesh(new THREE.SphereGeometry(0.127 * u, 24, 10, 0, Math.PI, Math.PI * 0.56, Math.PI * 0.4), beardMat, head);
+    beard.scale.set(0.95, 1.08, 1.04);
+    const stache = mesh(new THREE.CapsuleGeometry(0.009 * u, 0.04 * u, 3, 8), beardMat, head, 0, -0.034 * u, 0.124 * u);
+    stache.rotation.z = Math.PI / 2;
+    const grin = mesh(new THREE.TorusGeometry(0.03 * u, 0.007 * u, 6, 14, Math.PI), std('#2a1a14'), head, 0, -0.05 * u, 0.126 * u);
+    grin.rotation.z = Math.PI;
+
+    // Black beanie with a headlamp on the front
+    hat = new THREE.Group();
+    hat.rotation.x = -0.25;
+    head.add(hat);
+    const beanieMat = std(colors.beanie, { roughness: 1 });
+    const dome = mesh(new THREE.SphereGeometry(0.133 * u, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.42), beanieMat, hat);
+    dome.scale.set(0.93, 1.08, 1.02);
+    const cuff = mesh(new THREE.CylinderGeometry(0.132 * u, 0.136 * u, 0.05 * u, 24, 1, true), std(colors.beanie, { roughness: 1, side: THREE.DoubleSide }), hat, 0, 0.052 * u, 0);
+    cuff.scale.set(0.93, 1, 1.02);
+    const strap = mesh(new THREE.TorusGeometry(0.135 * u, 0.006 * u, 5, 28), std('#e0662a'), hat, 0, 0.052 * u, 0);
+    strap.rotation.x = Math.PI / 2;
+    strap.scale.set(0.93, 1.02, 1);
+    const housing = mesh(new THREE.BoxGeometry(0.06 * u, 0.034 * u, 0.026 * u), std('#202226', { roughness: 0.5 }), hat, 0, 0.055 * u, 0.137 * u);
+    housing.rotation.x = 0.1;
+    lamp = mesh(new THREE.CylinderGeometry(0.012 * u, 0.012 * u, 0.006 * u, 14), std('#fff4cf', { emissive: '#000000' }), hat, 0, 0.055 * u, 0.152 * u);
+    lamp.rotation.x = Math.PI / 2;
   } else {
     for (const s of [-1, 1]) {
-      mesh(new THREE.SphereGeometry(0.016 * u, 10, 8), mats.eye, head, s * 0.042 * u, 0.02 * u, fz - 0.004 * u);
-      mesh(new THREE.SphereGeometry(0.006 * u, 6, 4), mats.white, head, s * 0.038 * u, 0.026 * u, fz + 0.01 * u);
       const ch = mesh(new THREE.SphereGeometry(0.02 * u, 10, 8), mats.cheek, head, s * 0.068 * u, -0.025 * u, fz - 0.025 * u);
       ch.scale.set(1, 0.6, 0.35);
       mesh(new THREE.BoxGeometry(0.035 * u, 0.008 * u, 0.01 * u), mats.hair, head, s * 0.043 * u, 0.055 * u, fz - 0.006 * u).rotation.z = s * -0.15;
     }
-    // Hair: top cap, back, side-swept bangs and a ponytail
+    const smile = mesh(new THREE.TorusGeometry(0.036 * u, 0.0075 * u, 6, 14, Math.PI), mats.dark, head, 0, -0.05 * u, fz - 0.001 * u);
+    smile.rotation.z = Math.PI;
+    // Long dark hair worn down
     const r = 0.133 * u;
     const cap = mesh(new THREE.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.36), mats.hair, head, 0, 0.004 * u, -0.004 * u);
     cap.scale.set(0.95, 1.1, 1.04);
-    const back = mesh(new THREE.SphereGeometry(r, 24, 14, Math.PI, Math.PI, 0, Math.PI * 0.78), mats.hair, head, 0, 0.004 * u, -0.006 * u);
-    back.scale.set(0.97, 1.1, 1.05);
-    const bang = mesh(new THREE.SphereGeometry(0.07 * u, 14, 10), mats.hair, head, -0.035 * u, 0.085 * u, 0.075 * u);
-    bang.scale.set(1.3, 0.55, 0.6);
-    bang.rotation.z = 0.3;
-    mesh(new THREE.TorusGeometry(0.03 * u, 0.012 * u, 8, 14), mats.scrubs, head, 0, 0.05 * u, -0.13 * u);
-    const tail = new THREE.Group();
-    tail.position.set(0, 0.05 * u, -0.14 * u);
-    head.add(tail);
-    const pony = mesh(new THREE.CapsuleGeometry(0.042 * u, 0.2 * u, 4, 10), mats.hair, tail, 0, -0.12 * u, -0.02 * u);
-    pony.rotation.x = 0.25;
-    root.userData.ponytail = tail;
+    const back = mesh(new THREE.SphereGeometry(r, 24, 14, Math.PI, Math.PI, 0, Math.PI * 0.8), mats.hair, head, 0, 0.004 * u, -0.006 * u);
+    back.scale.set(0.98, 1.1, 1.06);
+    const bang = mesh(new THREE.SphereGeometry(0.07 * u, 14, 10), mats.hair, head, 0.035 * u, 0.088 * u, 0.072 * u);
+    bang.scale.set(1.35, 0.5, 0.6);
+    bang.rotation.z = -0.3;
+    for (const s of [-1, 1]) {
+      const side = mesh(new THREE.CapsuleGeometry(0.036 * u, 0.2 * u, 4, 10), mats.hair, head, s * 0.108 * u, -0.1 * u, -0.005 * u);
+      side.scale.set(0.75, 1, 1.1);
+      side.rotation.z = s * 0.1;
+    }
+    const flow = new THREE.Group();
+    flow.position.set(0, -0.02 * u, -0.095 * u);
+    head.add(flow);
+    const long = mesh(new THREE.CapsuleGeometry(0.105 * u, 0.24 * u, 4, 12), mats.hair, flow, 0, -0.17 * u, -0.012 * u);
+    long.scale.set(1.15, 1, 0.42);
+    root.userData.ponytail = flow;
+    lamp = mesh(new THREE.CylinderGeometry(0.014 * u, 0.014 * u, 0.012 * u, 12), std('#fff4cf', { emissive: '#000000' }), head, 0, 0.098 * u, 0.1 * u);
+    lamp.rotation.x = Math.PI / 2 - 0.6;
   }
 
-  // Outfit details on the chest
+  // Chest details
   const chestZ = 0.16 * u * 0.72 + 0.004 * u;
   if (isDaddy) {
     const tape = new THREE.Mesh(new THREE.PlaneGeometry(0.12 * u, 0.03 * u), new THREE.MeshStandardMaterial({ map: nameTape('DADDY', '#14284a', '#f2c230') }));
@@ -179,69 +275,87 @@ export function buildCharacter(def, custom = {}) {
     const patch = new THREE.Mesh(new THREE.CircleGeometry(0.035 * u, 20), new THREE.MeshStandardMaterial({ map: anchorPatch() }));
     patch.position.set(0.075 * u, 0.4 * u, chestZ);
     spine.add(patch);
-    // Gold shoulder boards
-    for (const s of [-1, 1]) {
-      mesh(new THREE.BoxGeometry(0.09 * u, 0.015 * u, 0.07 * u), mats.gold, spine, s * 0.17 * u * sw * 0.86, 0.52 * u, 0);
-    }
-    // Zipper
-    mesh(new THREE.BoxGeometry(0.008 * u, 0.4 * u, 0.006 * u), mats.metal, spine, 0, 0.27 * u, chestZ);
+    mesh(new THREE.BoxGeometry(0.008 * u, 0.46 * u, 0.006 * u), mats.metal, spine, 0, 0.27 * u, chestZ);
   } else {
-    // Teal scrubs showing at the V of the white coat
-    const v = new THREE.Shape();
-    v.moveTo(-0.06 * u, 0);
-    v.lineTo(0.06 * u, 0);
-    v.lineTo(0, -0.13 * u);
-    v.lineTo(-0.06 * u, 0);
-    const vneck = new THREE.Mesh(new THREE.ShapeGeometry(v), mats.scrubs);
-    vneck.position.set(0, 0.53 * u, chestZ - 0.003 * u);
-    spine.add(vneck);
+    const pocket = new THREE.Mesh(new THREE.PlaneGeometry(0.075 * u, 0.085 * u), std(colors.pocket, { roughness: 0.5 }));
+    pocket.position.set(0.065 * u, 0.37 * u, chestZ + 0.003 * u);
+    spine.add(pocket);
     const badge = new THREE.Mesh(new THREE.PlaneGeometry(0.1 * u, 0.03 * u), new THREE.MeshStandardMaterial({ map: nameTape('DR. RIELLE', '#ffffff', '#2a5e8c') }));
-    badge.position.set(0.07 * u, 0.4 * u, chestZ);
+    badge.position.set(-0.07 * u, 0.42 * u, chestZ + 0.003 * u);
     spine.add(badge);
-    // Coat tails
-    const coat = mesh(new THREE.CylinderGeometry(0.17 * u * sw, 0.2 * u * sw, 0.3 * u, 16, 1, true), std(colors.top, { side: THREE.DoubleSide }), spine, 0, -0.1 * u, 0);
-    coat.scale.z = 0.78;
+    for (let k = 0; k < 4; k++) mesh(new THREE.SphereGeometry(0.008 * u, 6, 5), std('#6f5f45'), spine, 0, (0.5 - k * 0.12) * u, chestZ + 0.002 * u);
+    // Sherpa hem with the lavender layer peeking out underneath
+    const hem = mesh(new THREE.CylinderGeometry(0.158 * u * sw, 0.165 * u * sw, 0.09 * u, 18, 1, true), std(colors.top, { roughness: 1, side: THREE.DoubleSide }), spine, 0, 0.0, 0);
+    hem.scale.z = 0.76;
+    const band = mesh(new THREE.CylinderGeometry(0.162 * u * sw, 0.164 * u * sw, 0.04 * u, 18, 1, true), std(colors.layer, { side: THREE.DoubleSide }), spine, 0, -0.06 * u, 0);
+    band.scale.z = 0.76;
   }
   // Stethoscope around the neck: both are doctors
-  const steth = mesh(new THREE.TorusGeometry(0.085 * u, 0.008 * u, 6, 20, Math.PI * 1.2), mats.dark, spine, 0, 0.5 * u, 0.03 * u);
+  const steth = mesh(new THREE.TorusGeometry(0.085 * u, 0.008 * u, 6, 20, Math.PI * 1.2), std('#2f6fb8', { roughness: 0.4 }), spine, 0, 0.5 * u, 0.03 * u);
   steth.rotation.set(Math.PI / 2 + 0.5, 0, Math.PI * 1.6 + 0.3);
-  mesh(new THREE.CylinderGeometry(0.02 * u, 0.02 * u, 0.012 * u, 12), mats.metal, spine, 0.04 * u, 0.34 * u, chestZ + 0.008 * u).rotation.x = Math.PI / 2;
+  mesh(new THREE.CylinderGeometry(0.02 * u, 0.02 * u, 0.012 * u, 12), mats.metal, spine, 0.04 * u, 0.32 * u, chestZ + 0.008 * u).rotation.x = Math.PI / 2;
+
+  // Summit medal (shown when you make it to the top)
+  const medal = new THREE.Group();
+  spine.add(medal);
+  const ribbon = std('#f5b31b', { roughness: 0.6 });
+  for (const s of [-1, 1]) {
+    const strip = mesh(new THREE.BoxGeometry(0.03 * u, 0.2 * u, 0.006 * u), ribbon, medal, s * 0.04 * u, 0.44 * u, chestZ + 0.012 * u);
+    strip.rotation.z = s * 0.35;
+  }
+  const disc = mesh(new THREE.CylinderGeometry(0.045 * u, 0.045 * u, 0.01 * u, 24), [std('#c9ced4', { metalness: 0.8, roughness: 0.3 }), new THREE.MeshStandardMaterial({ map: medalFace(), metalness: 0.5, roughness: 0.35 }), std('#c9ced4')], medal, 0, 0.32 * u, chestZ + 0.02 * u);
+  disc.rotation.x = Math.PI / 2;
+  medal.visible = false;
 
   // Backpack with a bedroll
-  const pack = mesh(new THREE.BoxGeometry(0.3 * u, 0.42 * u, 0.17 * u), mats.pack, spine, 0, 0.3 * u, -0.19 * u);
+  const packH = isDaddy ? 0.42 : 0.32;
+  const pack = mesh(new THREE.BoxGeometry(0.3 * u, packH * u, 0.17 * u), mats.pack, spine, 0, (isDaddy ? 0.3 : 0.25) * u, -0.19 * u);
   pack.receiveShadow = true;
-  mesh(new THREE.CylinderGeometry(0.06 * u, 0.06 * u, 0.34 * u, 10), std('#3c5a40'), spine, 0, 0.55 * u, -0.19 * u).rotation.z = Math.PI / 2;
-  for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.03 * u, 0.38 * u, 0.02 * u), mats.dark, spine, s * 0.1 * u, 0.32 * u, chestZ);
+  if (isDaddy) mesh(new THREE.CylinderGeometry(0.06 * u, 0.06 * u, 0.34 * u, 10), std('#3c5a40'), spine, 0, 0.55 * u, -0.19 * u).rotation.z = Math.PI / 2;
+  for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.03 * u, 0.38 * u, 0.02 * u), isDaddy ? mats.dark : mats.pack, spine, s * 0.1 * u, 0.32 * u, chestZ);
 
   // Arms
   const makeArm = (side) => {
     const shoulder = new THREE.Group();
     shoulder.position.set(side * (0.16 * sw + 0.045) * u, 0.47 * u, 0);
     spine.add(shoulder);
-    mesh(new THREE.CapsuleGeometry(0.056 * u, 0.2 * u, 4, 10), mats.sleeve, shoulder, 0, -0.15 * u, 0);
+    mesh(new THREE.CapsuleGeometry(0.056 * u, 0.2 * u, 4, 10), mats.top, shoulder, 0, -0.15 * u, 0);
     const elbow = new THREE.Group();
     elbow.position.y = -0.3 * u;
     shoulder.add(elbow);
-    mesh(new THREE.CapsuleGeometry(0.05 * u, 0.18 * u, 4, 10), mats.sleeve, elbow, 0, -0.12 * u, 0);
+    mesh(new THREE.CapsuleGeometry(0.05 * u, 0.18 * u, 4, 10), mats.top, elbow, 0, -0.12 * u, 0);
+    if (!isDaddy) mesh(new THREE.CylinderGeometry(0.047 * u, 0.047 * u, 0.035 * u, 12), mats.layer, elbow, 0, -0.225 * u, 0);
     const hand = new THREE.Group();
     hand.position.y = -0.27 * u;
     elbow.add(hand);
-    mesh(new THREE.SphereGeometry(0.055 * u, 12, 10), mats.skin, hand).scale.set(0.9, 1.1, 0.8);
+    mesh(new THREE.SphereGeometry(0.055 * u, 12, 10), mats.hands, hand).scale.set(0.9, 1.1, 0.8);
     return { shoulder, elbow, hand };
   };
   const armL = makeArm(1);
   const armR = makeArm(-1);
 
-  // Ice axe in the right hand: head in the hand, spike down
-  const axe = new THREE.Group();
-  armR.hand.add(axe);
-  mesh(new THREE.CylinderGeometry(0.016 * u, 0.018 * u, 0.62 * u, 8), mats.axe, axe, 0, -0.3 * u, 0);
-  mesh(new THREE.ConeGeometry(0.02 * u, 0.06 * u, 8), mats.metal, axe, 0, -0.64 * u, 0).rotation.x = Math.PI;
-  const pick = mesh(new THREE.BoxGeometry(0.03 * u, 0.04 * u, 0.32 * u), mats.metal, axe, 0, 0.02 * u, 0.04 * u);
-  pick.rotation.x = 0.12;
-  mesh(new THREE.BoxGeometry(0.06 * u, 0.025 * u, 0.06 * u), mats.metal, axe, 0, 0.02 * u, -0.13 * u);
+  // Trekking poles: Daddy carries two blue ones, Rielle one lavender one
+  const poleR = makePole(colors.pole, u, armR.hand);
+  const poleL = isDaddy ? makePole(colors.pole, u, armL.hand) : null;
+
+  // Silly gear from Rielle's random stuff (hidden until used)
+  const pan = new THREE.Group();
+  armR.hand.add(pan);
+  mesh(new THREE.BoxGeometry(0.03 * u, 0.26 * u, 0.02 * u), std('#5b3d24'), pan, 0, -0.14 * u, 0);
+  const panDisc = mesh(new THREE.CylinderGeometry(0.15 * u, 0.13 * u, 0.04 * u, 24), std('#2a2d32', { metalness: 0.7, roughness: 0.35 }), pan, 0, -0.42 * u, 0);
+  panDisc.rotation.x = Math.PI / 2;
+  pan.visible = false;
+
+  const umbrella = new THREE.Group();
+  umbrella.rotation.x = Math.PI / 2;
+  armL.hand.add(umbrella);
+  mesh(new THREE.CylinderGeometry(0.01 * u, 0.01 * u, 0.95 * u, 6), mats.dark, umbrella, 0, 0.45 * u, 0);
+  const canopy = mesh(new THREE.ConeGeometry(0.55 * u, 0.22 * u, 10, 1, true), std('#ff4b8b', { side: THREE.DoubleSide, roughness: 0.6 }), umbrella, 0, 0.88 * u, 0);
+  canopy.castShadow = true;
+  umbrella.visible = false;
 
   // Legs
+  const skates = [];
   const makeLeg = (side) => {
     const hip = new THREE.Group();
     hip.position.set(side * 0.095 * u * (sw * 0.85), -0.02 * u, 0);
@@ -253,24 +367,37 @@ export function buildCharacter(def, custom = {}) {
     mesh(new THREE.CapsuleGeometry(0.066 * u, 0.28 * u, 4, 10), mats.pants, knee, 0, -0.2 * u, 0);
     const boot = mesh(new THREE.BoxGeometry(0.13 * u, 0.11 * u, 0.26 * u), mats.boots, knee, 0, -0.43 * u, 0.04 * u);
     boot.receiveShadow = true;
+    const sk = new THREE.Group();
+    knee.add(sk);
+    mesh(new THREE.BoxGeometry(0.12 * u, 0.02 * u, 0.28 * u), std('#9b5cff'), sk, 0, -0.495 * u, 0.04 * u);
+    const wheel = new THREE.CylinderGeometry(0.03 * u, 0.03 * u, 0.025 * u, 10);
+    wheel.rotateZ(Math.PI / 2);
+    for (const wz of [-0.06, 0.14]) for (const wx of [-0.045, 0.045]) mesh(wheel, std('#ffd23a'), sk, wx * u, -0.52 * u, wz * u);
+    sk.visible = false;
+    skates.push(sk);
     return { hip, knee };
   };
   const legL = makeLeg(1);
   const legR = makeLeg(-1);
 
-  // Headlamp (the light itself is added by the game)
-  const lamp = mesh(new THREE.CylinderGeometry(0.02 * u, 0.02 * u, 0.018 * u, 12), std('#ffe9a8', { emissive: '#000000' }), head, 0, 0.075 * u, 0.112 * u);
-  lamp.rotation.x = Math.PI / 2 - 0.45;
-
   root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
 
   const rig = {
-    def, root, hips, spine, head, armL, armR, legL, legR, axe, lamp, mats, u,
+    def, root, hips, spine, head, armL, armR, legL, legR, lamp, mats, u,
+    hat, medal, poleR, poleL, pan, umbrella, skates,
     hipY: 0.95 * u,
     phase: 0,
     eyeHeight: 1.62 * u,
     setSkin(hex) { mats.skin.color.set(hex); },
     setHair(hex) { mats.hair.color.set(hex); },
+    // Show or hide the silly gear
+    setGear({ pan: hasPan = false, umbrella: hasUmbrella = false, skates: hasSkates = false } = {}) {
+      pan.visible = hasPan;
+      poleR.visible = !hasPan;
+      umbrella.visible = hasUmbrella;
+      if (poleL) poleL.visible = !hasUmbrella;
+      for (const sk of skates) sk.visible = hasSkates;
+    },
   };
   return rig;
 }
@@ -281,7 +408,7 @@ const T = {
   spineX: 0, spineY: 0, headX: 0, headY: 0, bob: 0, rootX: 0,
 };
 
-// state: { speed, sprint, grounded, attack (-1 or 0..1), wave, cheer, dead (0..1), t }
+// state: { speed, grounded, attack (-1 or 0..1), wave, cheer, umbrella, use, dead (0..1), t }
 export function animateCharacter(rig, dt, s) {
   const walk = clamp(s.speed / 5, 0, 1.7);
   if (walk > 0.04) rig.phase += dt * (4 + s.speed * 1.15);
@@ -352,6 +479,18 @@ export function animateCharacter(rig, dt, s) {
     T.spineX += a > 0.35 && a < 0.7 ? 0.2 : 0;
   }
 
+  if (s.umbrella) {
+    T.shL = -0.35;
+    T.shLz = 0.15;
+    T.elL = -1.3;
+  }
+  if (s.use > 0) {
+    // Hold the item out in front
+    T.shL = -1.35;
+    T.shLz = 0.1;
+    T.elL = -0.2;
+  }
+
   if (s.dead > 0) {
     T.rootX = -s.dead * Math.PI * 0.48;
     T.shLz = 1.2; T.shRz = -1.2;
@@ -376,5 +515,5 @@ export function animateCharacter(rig, dt, s) {
   rig.hips.position.y = damp(rig.hips.position.y, rig.hipY + T.bob, 18, dt);
   rig.root.rotation.x = damp(rig.root.rotation.x, T.rootX, 6, dt);
   const pony = rig.root.userData.ponytail;
-  if (pony) pony.rotation.x = damp(pony.rotation.x, 0.2 + walk * 0.5 + Math.sin(p * 2) * 0.12 * walk, 8, dt);
+  if (pony) pony.rotation.x = damp(pony.rotation.x, 0.06 + walk * 0.22 + Math.sin(p * 2) * 0.05 * walk, 8, dt);
 }

@@ -1,6 +1,7 @@
 // Everything on screen that isn't 3D: menus, the HUD, toasts and prompts.
 import { CAMPS, SUMMIT, ALT_BASE, ALT_SUMMIT } from './heightfield.js';
 import { formatMeters, wrapAngle, clamp } from './util.js';
+import { STUFF, EMPTY_ICON } from './stuff.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -12,8 +13,13 @@ export class UI {
     }
     this.slots = {};
     for (const el of document.querySelectorAll('.slot')) {
+      if (el.dataset.item === 'stuff') continue;
       this.slots[el.dataset.item] = { el, count: el.querySelector('.slot-count'), last: -1 };
     }
+    this.stuffEl = $('slot-stuff');
+    this.buffsEl = $('buffs');
+    this.lastStuff = undefined;
+    this.lastBuffs = '';
     this.toastsEl = $('toasts');
     this.promptEl = $('prompt');
     this.promptText = $('prompt-text');
@@ -161,6 +167,41 @@ export class UI {
       s.last = n;
       s.count.textContent = n;
       s.el.classList.toggle('empty', n === 0);
+    }
+  }
+
+  // Rielle's random item slot
+  updateStuff(key) {
+    if (key === this.lastStuff) return;
+    const had = this.lastStuff;
+    this.lastStuff = key;
+    const item = key ? STUFF[key] : null;
+    $('stuff-icon').innerHTML = item ? item.icon : EMPTY_ICON;
+    $('stuff-name').textContent = item ? item.name : "Rielle's";
+    this.stuffEl.classList.toggle('empty', !item);
+    this.stuffEl.classList.toggle('ready', !!item);
+    this.stuffEl.setAttribute('aria-label', item ? `Use ${item.name}` : "Rielle's random stuff: empty");
+    if (item && had !== undefined) {
+      this.stuffEl.classList.remove('pop');
+      void this.stuffEl.offsetWidth;
+      this.stuffEl.classList.add('pop');
+    }
+  }
+
+  // Active effects with seconds left: [{ key, label, t }]
+  updateBuffs(list) {
+    const sig = list.map((b) => `${b.key}:${b.label}:${Math.ceil(b.t)}`).join('|');
+    if (sig === this.lastBuffs) return;
+    this.lastBuffs = sig;
+    this.buffsEl.innerHTML = '';
+    for (const b of list) {
+      const el = document.createElement('span');
+      el.className = 'buff';
+      el.innerHTML = STUFF[b.key] ? STUFF[b.key].icon : '';
+      const txt = document.createElement('span');
+      txt.textContent = b.t != null ? `${b.label} ${Math.ceil(b.t)}s` : b.label;
+      el.appendChild(txt);
+      this.buffsEl.appendChild(el);
     }
   }
 

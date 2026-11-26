@@ -204,6 +204,59 @@ export class AudioFX {
       case 'click':
         this.tone(880, 0.06, { type: 'triangle', gain: 0.08 });
         break;
+      case 'box':
+        [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, 0.16, { type: 'square', gain: 0.06, delay: i * 0.06 }));
+        break;
+      case 'spray':
+        this.noise(0.7, { type: 'highpass', freq: 3000, gain: 0.2, attack: 0.02 });
+        break;
+      case 'slip':
+        this.tone(1400, 0.6, { type: 'sine', gain: 0.12, slide: 300 });
+        break;
+      case 'squawk':
+        this.tone(950, 0.45, { type: 'square', gain: 0.12, slide: 620, vibrato: 90, vibRate: 22 });
+        this.tone(700, 0.3, { type: 'sawtooth', gain: 0.06, slide: 500, delay: 0.05 });
+        break;
+      case 'heartbeat':
+        for (let i = 0; i < 3; i++) {
+          this.tone(70, 0.12, { gain: 0.3, slide: 50, delay: i * 0.7 });
+          this.tone(64, 0.12, { gain: 0.24, slide: 46, delay: i * 0.7 + 0.2 });
+        }
+        break;
+      case 'pfft':
+        this.noise(0.9, { type: 'lowpass', freq: 380, gain: 0.35, slide: 160, am: 38 });
+        this.tone(110, 0.8, { type: 'sawtooth', gain: 0.06, slide: 70, vibrato: 18, vibRate: 30 });
+        break;
+      case 'bonk':
+        this.tone(620, 0.4, { type: 'triangle', gain: 0.22, slide: 560 });
+        this.tone(1240, 0.3, { type: 'sine', gain: 0.08 });
+        this.noise(0.08, { freq: 2000, gain: 0.2 });
+        break;
+      case 'pop':
+        this.noise(0.12, { type: 'highpass', freq: 1200, gain: 0.35 });
+        [1047, 1319, 1568].forEach((f, i) => this.tone(f, 0.18, { type: 'triangle', gain: 0.1, delay: 0.1 + i * 0.07 }));
+        break;
+      case 'bubble':
+        for (let i = 0; i < 6; i++) this.noise(0.04, { type: 'highpass', freq: 1800, gain: 0.25, delay: i * 0.09 + Math.random() * 0.04 });
+        break;
+      case 'whee':
+        this.tone(400, 0.6, { type: 'sine', gain: 0.12, slide: 1400 });
+        break;
+      case 'sizzle':
+        this.noise(0.8, { type: 'highpass', freq: 4000, gain: 0.12 });
+        this.tone(300, 0.4, { type: 'sawtooth', gain: 0.05, slide: 900 });
+        break;
+      case 'umbrella':
+        this.noise(0.15, { type: 'bandpass', freq: 900, gain: 0.2 });
+        this.tone(500, 0.12, { type: 'triangle', gain: 0.1, delay: 0.05 });
+        break;
+      case 'flush':
+        this.noise(1.6, { type: 'bandpass', freq: 600, q: 0.6, gain: 0.3, slide: 250, attack: 0.1 });
+        break;
+      case 'block':
+        this.tone(300, 0.15, { type: 'square', gain: 0.1 });
+        this.noise(0.12, { type: 'bandpass', freq: 1200, gain: 0.2 });
+        break;
       default:
         break;
     }
