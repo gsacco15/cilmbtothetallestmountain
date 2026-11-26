@@ -1,0 +1,10 @@
+{
+  "name": "climb-the-tallest-mountain",
+  "version": "1.0.0",
+  "description": "A 3D survival climbing game made with three.js. Reach the summit and win the Lamborghini.",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}

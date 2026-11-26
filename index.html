@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Climb the Tallest Mountain</title>
+<!--ARTIFACT-HEAD-START-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Nunito:wght@600;700;800;900&family=Space+Mono:wght@700&display=swap">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+<!--ARTIFACT-HEAD-END-->
+</head>
+<body>
+<!--ARTIFACT-BODY-START-->
+<canvas id="game" aria-label="Climb the Tallest Mountain game view"></canvas>
+
+<div id="loading" class="loading" role="status">
+  <div class="loading-peak" aria-hidden="true"></div>
+  <p class="loading-text">Packing the backpack&hellip;</p>
+</div>
+
+<!-- Title screen -->
+<section id="screen-title" class="screen screen-title" hidden>
+  <div class="title-panel">
+    <p class="eyebrow">Base Camp &middot; 1,350 m &rarr; Summit &middot; 8,849 m</p>
+    <h1 class="game-title"><span>Climb the</span><span>Tallest</span><span>Mountain</span></h1>
+
+    <div class="bet">
+      <div class="bet-head">
+        <span class="bet-label">The Bet</span>
+        <span class="bet-prize">Prize: a Lamborghini</span>
+      </div>
+      <p class="bet-line">Someone made a bet: climb to the top of the tallest mountain and the Lamborghini is yours.</p>
+      <ul class="rules">
+        <li><b>Survive day and night.</b> Keep your food, water and warmth up.</li>
+        <li><b>Animals will attack.</b> Swing your ice axe to scare them off.</li>
+        <li><b>If you get killed, you're done.</b> You go back to the bottom.</li>
+        <li><b>You can give up any time,</b> but then you don't get the Lamborghini.</li>
+      </ul>
+    </div>
+
+    <h2 class="pick-label">Choose your climber</h2>
+    <div class="climbers" role="radiogroup" aria-label="Choose your climber">
+      <button type="button" id="pick-daddy" class="climber" data-char="daddy" role="radio" aria-checked="true">
+        <span class="climber-name">Daddy</span>
+        <span class="climber-role">6'2" &middot; Navy doctor</span>
+        <span class="climber-perks">More health &middot; Big axe swing &middot; Long stride</span>
+      </button>
+      <button type="button" id="pick-rielle" class="climber" data-char="rielle" role="radio" aria-checked="false">
+        <span class="climber-name">Dr. Rielle</span>
+        <span class="climber-role">a.k.a. Mrs. Rielle &middot; Doctor</span>
+        <span class="climber-perks">First aid heals double &middot; Extra stamina</span>
+      </button>
+    </div>
+    <div class="customize">
+      <div class="swatch-row" id="skin-row"><span class="swatch-label">Skin</span><div class="swatches" id="skin-swatches"></div></div>
+      <div class="swatch-row" id="hair-row" hidden><span class="swatch-label">Hair</span><div class="swatches" id="hair-swatches"></div></div>
+    </div>
+
+    <div class="title-actions">
+      <button type="button" id="start-btn" class="btn btn-primary">Start the climb</button>
+      <button type="button" id="howto-btn" class="btn btn-ghost">How to play</button>
+    </div>
+    <p class="record" id="record" hidden></p>
+  </div>
+</section>
+
+<!-- How to play -->
+<section id="screen-howto" class="screen screen-modal" hidden>
+  <div class="modal">
+    <h2>How to play</h2>
+    <div class="howto-grid">
+      <div>
+        <h3>Controls</h3>
+        <dl class="keys">
+          <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Walk</dd>
+          <dt>Mouse</dt><dd>Look around (click the game first)</dd>
+          <dt><kbd>Shift</kbd></dt><dd>Run (uses stamina)</dd>
+          <dt><kbd>Space</kbd></dt><dd>Jump</dd>
+          <dt>Click or <kbd>F</kbd></dt><dd>Swing your ice axe</dd>
+          <dt><kbd>E</kbd></dt><dd>Eat, drink, open crates, sleep</dd>
+          <dt><kbd>1</kbd>&ndash;<kbd>4</kbd></dt><dd>Use what's in your backpack</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
+          <dt><kbd>M</kbd></dt><dd>Sound on or off</dd>
+        </dl>
+        <p class="note">On a phone or tablet: drag the left side to walk, drag the right side to look, and use the buttons.</p>
+      </div>
+      <div>
+        <h3>Staying alive</h3>
+        <ul class="tips">
+          <li>Follow the orange flags. The gold light marks the summit.</li>
+          <li>Eat red berries and brown mushrooms. Red mushrooms with white spots make you sick.</li>
+          <li>Drink from lakes and ponds. Up in the snow, scoop snow for water, but it makes you cold.</li>
+          <li>Campfires keep you warm and animals stay away from camps.</li>
+          <li>Open the supply crate at each camp once a day. Sleep in a tent to skip the night.</li>
+          <li>Up high the air is thin, so you get tired faster.</li>
+        </ul>
+      </div>
+    </div>
+    <button type="button" class="btn btn-primary" id="howto-close">Got it</button>
+  </div>
+</section>
+
+<!-- HUD -->
+<div id="hud" class="hud" hidden>
+  <div class="hud-tl panel">
+    <div class="who"><span id="hud-name" class="who-name">Daddy</span><span id="hud-role" class="who-role">Navy Doctor</span></div>
+    <div class="bars">
+      <div class="bar" data-stat="health"><span class="bar-label">Health</span><div class="track"><div class="fill"></div></div><span class="val">100</span></div>
+      <div class="bar" data-stat="food"><span class="bar-label">Food</span><div class="track"><div class="fill"></div></div><span class="val">100</span></div>
+      <div class="bar" data-stat="water"><span class="bar-label">Water</span><div class="track"><div class="fill"></div></div><span class="val">100</span></div>
+      <div class="bar" data-stat="warmth"><span class="bar-label">Warmth</span><div class="track"><div class="fill"></div></div><span class="val">100</span></div>
+      <div class="bar bar-thin" data-stat="stamina"><span class="bar-label">Stamina</span><div class="track"><div class="fill"></div></div><span class="val">100</span></div>
+    </div>
+  </div>
+
+  <div class="hud-tc">
+    <div class="compass" aria-hidden="true"><div class="compass-strip" id="compass"></div><div class="compass-tick"></div></div>
+    <div class="clock panel"><span class="clock-dot" id="clock-dot"></span><span id="clock-text">Day 1 &middot; 7:00 AM</span></div>
+  </div>
+
+  <div class="hud-tr">
+    <div class="alt panel">
+      <div class="alt-row"><span class="alt-num" id="alt-num">1,350</span><span class="alt-unit">m</span></div>
+      <div class="alt-sub"><span id="air">Air 85%</span><span id="next-target">Camp 1</span></div>
+    </div>
+    <div class="hud-btns">
+      <button type="button" class="icon-btn" id="mute-btn" aria-label="Sound off" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="wave" d="M16 8.5a4.5 4.5 0 0 1 0 7M18.5 6a8 8 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="pause-btn" aria-label="Pause">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="gauge" id="gauge" aria-hidden="true">
+    <div class="gauge-track"><div class="gauge-fill" id="gauge-fill"></div><div class="gauge-best" id="gauge-best"></div><div class="gauge-you" id="gauge-you"></div></div>
+    <div class="gauge-marks" id="gauge-marks"></div>
+  </div>
+
+  <div class="threat" id="threat" hidden></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="prompt" id="prompt" hidden><kbd id="prompt-key">E</kbd><span id="prompt-text"></span></div>
+
+  <div class="inventory" id="inventory">
+    <button type="button" class="slot" data-item="ration" id="slot-ration"><kbd>1</kbd><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="7" y="8" width="18" height="18" rx="2" fill="#d8dde2"/><rect x="7" y="12" width="18" height="10" fill="#e2472f"/><ellipse cx="16" cy="8" rx="9" ry="2.5" fill="#b9c0c7"/><path d="M11 17h10" stroke="#fff" stroke-width="2"/></svg><span class="slot-name">Soup</span><span class="slot-count">0</span></button>
+    <button type="button" class="slot" data-item="water" id="slot-water"><kbd>2</kbd><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="12" y="3" width="8" height="4" rx="1" fill="#2f6fd6"/><path d="M11 8h10l1 3v16a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2V11z" fill="#8fd3ff"/><path d="M10 16h12v6H10z" fill="#3fb0ff"/></svg><span class="slot-name">Water</span><span class="slot-count">0</span></button>
+    <button type="button" class="slot" data-item="firstaid" id="slot-firstaid"><kbd>3</kbd><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="9" width="24" height="17" rx="3" fill="#f4f6f8"/><path d="M12 9V6h8v3" stroke="#c6ccd2" stroke-width="2" fill="none"/><path d="M14 13h4v4h4v4h-4v4h-4v-4h-4v-4h4z" fill="#e0202e"/></svg><span class="slot-name">First aid</span><span class="slot-count">0</span></button>
+    <button type="button" class="slot" data-item="warmer" id="slot-warmer"><kbd>4</kbd><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="7" y="6" width="18" height="21" rx="4" fill="#ff8a2a"/><path d="M16 11c3 3 4 5 4 7a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-2-1-4 0-6z" fill="#fff3c4"/></svg><span class="slot-name">Warmer</span><span class="slot-count">0</span></button>
+  </div>
+
+  <div class="hurt" id="hurt"></div>
+  <div class="cold" id="cold"></div>
+</div>
+
+<!-- Touch controls -->
+<div id="touch" class="touch-ui" hidden>
+  <div class="joy-zone" id="joy-zone"><div class="joy-base" id="joy-base"><div class="joy-knob" id="joy-knob"></div></div><span class="touch-hint">Drag to walk</span></div>
+  <div class="look-zone" id="look-zone"><span class="touch-hint">Drag to look</span></div>
+  <div class="touch-btns">
+    <button type="button" class="tbtn" data-act="sprint" aria-pressed="false">Run</button>
+    <button type="button" class="tbtn" data-act="jump">Jump</button>
+    <button type="button" class="tbtn tbtn-big" data-act="attack">Swing</button>
+    <button type="button" class="tbtn" data-act="use">Use</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<section id="screen-pause" class="screen screen-modal" hidden>
+  <div class="modal modal-narrow">
+    <h2>Paused</h2>
+    <p class="modal-sub" id="pause-sub">Day 1 &middot; 1,350 m</p>
+    <div class="stack">
+      <button type="button" class="btn btn-primary" id="resume-btn">Keep climbing</button>
+      <button type="button" class="btn btn-ghost" id="pause-howto-btn">How to play</button>
+      <button type="button" class="btn btn-danger" id="giveup-btn">Give up</button>
+    </div>
+  </div>
+</section>
+
+<!-- Give up confirm -->
+<section id="screen-confirm" class="screen screen-modal" hidden>
+  <div class="modal modal-narrow">
+    <h2>Give up?</h2>
+    <p class="modal-sub">If you give up now, you won't get the Lamborghini.</p>
+    <div class="stack">
+      <button type="button" class="btn btn-primary" id="confirm-no">Keep climbing</button>
+      <button type="button" class="btn btn-danger" id="confirm-yes">Yes, I give up</button>
+    </div>
+  </div>
+</section>
+
+<!-- Ending screens -->
+<section id="screen-end" class="screen screen-end" hidden>
+  <div class="end-card" id="end-card">
+    <p class="eyebrow" id="end-eyebrow">Expedition over</p>
+    <h2 class="end-title" id="end-title">You got knocked out</h2>
+    <p class="end-sub" id="end-sub">Back to the bottom.</p>
+    <dl class="end-stats" id="end-stats"></dl>
+    <div class="stack-row">
+      <button type="button" class="btn btn-primary" id="end-primary">Start over from Base Camp</button>
+      <button type="button" class="btn btn-ghost" id="end-secondary">Main menu</button>
+      <button type="button" class="btn btn-gold" id="honk-btn" hidden>Honk the horn</button>
+    </div>
+  </div>
+</section>
+
+<div class="fade" id="fade"></div>
+<div class="zzz" id="zzz" hidden>Sleeping until morning&hellip;</div>
+<!--ARTIFACT-BODY-END-->
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
