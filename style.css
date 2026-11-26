@@ -610,6 +610,31 @@ kbd {
   letter-spacing: 0.04em;
 }
 
+/* ---------------------------------------------------------------- subtitles */
+.caption {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bottom) + 156px);
+  transform: translateX(-50%);
+  z-index: 46;
+  width: max-content;
+  max-width: min(600px, calc(100% - 32px));
+  display: grid;
+  gap: 2px;
+  padding: 9px 16px 10px;
+  border-radius: 12px;
+  background: rgba(10, 13, 18, 0.82);
+  border: 1px solid var(--line);
+  text-align: center;
+  pointer-events: none;
+  animation: toast-in 0.2s ease both;
+}
+.caption.top { top: calc(var(--top) + 78px); bottom: auto; }
+.caption-who { font-family: var(--font-display); font-weight: 900; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; }
+.caption-who.who-rielle { color: #d2c2f2; }
+.caption-who.who-ben { color: #8fbcff; }
+.caption-text { font-weight: 800; font-size: 16px; line-height: 1.35; color: var(--snow); text-wrap: balance; }
+
 /* ---------------------------------------------------------------- touch */
 .touch-ui { position: fixed; inset: 0; z-index: 19; }
 body:not(.touch) .touch-ui { display: none; }
@@ -700,6 +725,8 @@ body.touch .prompt { bottom: calc(var(--bottom) + 240px); }
   .slot-name { display: none; }
   .inventory { gap: 6px; }
   .toasts { top: calc(var(--top) + 222px); }
+  .caption { bottom: calc(var(--bottom) + 250px); }
+  .caption-text { font-size: 14px; }
   .threat { top: calc(var(--top) + 206px); }
   .title-actions {
     position: sticky;

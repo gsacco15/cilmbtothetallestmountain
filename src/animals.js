@@ -1,7 +1,7 @@
 // Wild animals: wolves, bears, rattlesnakes, mountain goats, snow leopards
 // and eagles. Each kind lives at its own altitude and attacks its own way.
 import * as THREE from 'three';
-import { clamp, damp, dampAngle, TAU } from './util.js';
+import { clamp, damp, dampAngle, TAU, toon } from './util.js';
 import { heightAt, WATER, inSafeZone, BOUND_R } from './heightfield.js';
 
 export const ANIMALS = {
@@ -17,7 +17,7 @@ export const ANIMALS = {
 function makeKit() {
   const mats = [];
   const M = (color, extra = {}) => {
-    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
+    const m = toon({ color, ...extra });
     m.userData.baseEmissive = m.emissive.clone();
     m.userData.baseIntensity = m.emissiveIntensity;
     mats.push(m);

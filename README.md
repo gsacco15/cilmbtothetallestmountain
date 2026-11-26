@@ -83,6 +83,25 @@ There's other random stuff on the mountain too: pink flamingos at Base Camp, a g
 rubber duck in the big lake, a couch at Camp 1, a snack machine at Camp 2 and a toilet
 at Camp 3 (try flushing it a few times).
 
+## Voices and sound
+
+Ben and Rielle talk a little during the climb: Rielle thinks everything on the mountain
+is dirty and needs cleaning, and Ben has had enough of hearing about it. When one of
+them is waiting at Base Camp, their lines come over the walkie-talkie. Every line shows
+as a subtitle.
+
+The voices, the ambience (meadow birds, mountain wind, night crickets, campfire) and the
+animal calls were made with ElevenLabs and live in `assets/audio`. Ben is the
+"Jeremy" voice and Rielle is the "Boo" voice. Small effects like footsteps and the
+item sounds are made in code.
+
+## Look
+
+The game is drawn like a hand-painted mountain film: cel shading, ink outlines, a
+cold Himalayan palette, snowcapped peaks around the valley, a plume of snow blowing off
+the summit, and air that gets clearer the higher you climb. The outline and color pass
+is in `src/ink.js`.
+
 ## Code map
 
 | File | What it does |
@@ -95,6 +114,8 @@ at Camp 3 (try flushing it a few times).
 | `src/player.js` | Movement, survival stats and the backpack |
 | `src/car.js` | The prize car on the summit |
 | `src/stuff.js` | Rielle's random stuff: items and icons |
-| `src/audio.js` | Sound effects made with the Web Audio API (no sound files) |
+| `src/dialog.js` | Ben and Rielle's lines and when they're said |
+| `src/ink.js` | The hand-drawn look: outlines, color and paper grain |
+| `src/audio.js` | Recorded voices, ambience and animal calls, plus small effects made in code |
 | `src/ui.js`, `index.html`, `style.css` | Menus and the on-screen display |
 | `src/main.js` | Game states and the main loop |

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import * as HF from './heightfield.js';
 import { mulberry32, fbm } from './noise.js';
-import { clamp, smoothstep, mergeColored, xf, canvasTexture, formatMeters, FONT_STACK, TAU } from './util.js';
+import { clamp, smoothstep, mergeColored, xf, canvasTexture, formatMeters, FONT_STACK, TAU, toon } from './util.js';
 import { buildCar } from './car.js';
 
 const { HALF, SEG, CELL, WATER, HEIGHTS, CAMPS, SUMMIT, PONDS, ROUTE, heightAt, normalYAt, snowLineAt } = HF;
@@ -49,18 +49,19 @@ class ColliderGrid {
 }
 
 // ---------------------------------------------------------------- terrain
+// A colder, Himalayan palette: muted greens, blue-gray rock, blue-white snow
 const PAL = {
-  sand: new THREE.Color('#d6c08a'),
-  mud: new THREE.Color('#7b6a48'),
-  grassA: new THREE.Color('#5a9a39'),
-  grassB: new THREE.Color('#84b54c'),
-  meadow: new THREE.Color('#a7c75c'),
-  alpineA: new THREE.Color('#8e9856'),
-  alpineB: new THREE.Color('#7a6b4e'),
-  rockA: new THREE.Color('#857f78'),
-  rockB: new THREE.Color('#5d5955'),
-  snow: new THREE.Color('#f4f7fb'),
-  snowShade: new THREE.Color('#d6e2ef'),
+  sand: new THREE.Color('#cdb88a'),
+  mud: new THREE.Color('#6f6247'),
+  grassA: new THREE.Color('#5a8744'),
+  grassB: new THREE.Color('#7b9d52'),
+  meadow: new THREE.Color('#9db067'),
+  alpineA: new THREE.Color('#8a8b64'),
+  alpineB: new THREE.Color('#766853'),
+  rockA: new THREE.Color('#827e7c'),
+  rockB: new THREE.Color('#57565d'),
+  snow: new THREE.Color('#f3f7fc'),
+  snowShade: new THREE.Color('#c4d4ea'),
 };
 const tA = new THREE.Color(), tB = new THREE.Color(), tC = new THREE.Color();
 
@@ -94,14 +95,30 @@ function buildTerrain(scene) {
   const col = new Float32Array(tris * 9);
   const c = new THREE.Color();
   const rnd = mulberry32(5);
+  // Smooth normals from the height grid: the big landforms shade like a
+  // painting while each triangle keeps its own color
+  const N = new Float32Array(W * W * 3);
+  for (let j = 0; j <= SEG; j++) {
+    for (let i = 0; i <= SEG; i++) {
+      const hl = HEIGHTS[j * W + Math.max(0, i - 1)], hr = HEIGHTS[j * W + Math.min(SEG, i + 1)];
+      const hd = HEIGHTS[Math.max(0, j - 1) * W + i], hu = HEIGHTS[Math.min(SEG, j + 1) * W + i];
+      const nx = -(hr - hl) / (2 * CELL), nz = -(hu - hd) / (2 * CELL);
+      const len = Math.hypot(nx, 1, nz);
+      const k = (j * W + i) * 3;
+      N[k] = nx / len; N[k + 1] = 1 / len; N[k + 2] = nz / len;
+    }
+  }
+  const nor = new Float32Array(tris * 9);
   let o = 0;
-  const tri = (ax, ay, az, bx, by, bz, cx, cy, cz) => {
+  const putN = (off, gi) => { nor[off] = N[gi * 3]; nor[off + 1] = N[gi * 3 + 1]; nor[off + 2] = N[gi * 3 + 2]; };
+  const tri = (ax, ay, az, bx, by, bz, cx, cy, cz, ga, gb, gc) => {
+    putN(o, ga); putN(o + 3, gb); putN(o + 6, gc);
     const ux = bx - ax, uy = by - ay, uz = bz - az;
     const vx = cx - ax, vy = cy - ay, vz = cz - az;
     const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
     const ny1 = ny / Math.hypot(nx, ny, nz);
     terrainColor((ax + bx + cx) / 3, (ay + by + cy) / 3, (az + bz + cz) / 3, ny1, c);
-    const j = 0.93 + rnd() * 0.12;
+    const j = 0.95 + rnd() * 0.08;
     pos[o] = ax; pos[o + 1] = ay; pos[o + 2] = az;
     pos[o + 3] = bx; pos[o + 4] = by; pos[o + 5] = bz;
     pos[o + 6] = cx; pos[o + 7] = cy; pos[o + 8] = cz;
@@ -118,16 +135,17 @@ function buildTerrain(scene) {
       const z0 = -HALF + j * CELL, z1 = z0 + CELL;
       const h00 = HEIGHTS[j * W + i], h10 = HEIGHTS[j * W + i + 1];
       const h01 = HEIGHTS[(j + 1) * W + i], h11 = HEIGHTS[(j + 1) * W + i + 1];
-      tri(x0, h00, z0, x0, h01, z1, x1, h10, z0);
-      tri(x1, h10, z0, x0, h01, z1, x1, h11, z1);
+      const g00 = j * W + i, g10 = g00 + 1, g01 = g00 + W, g11 = g01 + 1;
+      tri(x0, h00, z0, x0, h01, z1, x1, h10, z0, g00, g01, g10);
+      tri(x1, h10, z0, x0, h01, z1, x1, h11, z1, g10, g01, g11);
     }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.computeVertexNormals();
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   geo.computeBoundingSphere();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 });
+  const mat = toon({ vertexColors: true, roughness: 0.96, metalness: 0 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   scene.add(mesh);
@@ -136,7 +154,7 @@ function buildTerrain(scene) {
 
 // ---------------------------------------------------------------- water
 function buildWater(scene, world, envMap) {
-  const mat = new THREE.MeshStandardMaterial({
+  const mat = toon({
     color: '#2b7fb6', roughness: 0.08, metalness: 0.05, transparent: true, opacity: 0.84, envMap, envMapIntensity: 0.9,
   });
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(HF.WORLD, HF.WORLD, 1, 1), mat);
@@ -145,7 +163,7 @@ function buildWater(scene, world, envMap) {
   plane.receiveShadow = true;
   scene.add(plane);
 
-  const icy = new THREE.MeshStandardMaterial({
+  const icy = toon({
     color: '#bfe5f4', roughness: 0.22, metalness: 0.1, transparent: true, opacity: 0.93, envMap, envMapIntensity: 0.8,
   });
   for (const p of PONDS) {
@@ -327,11 +345,11 @@ function scatter(scene, world) {
     { geo: new THREE.IcosahedronGeometry(1.0, 0), color: '#5daa45', matrix: xf(0.75, 2.4, 0.3, 0.3, 0.2, 0) },
     { geo: new THREE.IcosahedronGeometry(0.9, 0), color: '#468d36', matrix: xf(-0.6, 3.6, -0.2, 0.1, 0.5, 0.2) },
   ]);
-  const vegMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
+  const vegMat = toon({ vertexColors: true, roughness: 0.9, flatShading: true });
   chunkedInstances(scene, pineGeo, vegMat, pines);
   chunkedInstances(scene, roundGeo, vegMat, rounds);
 
-  const rockMat = new THREE.MeshStandardMaterial({ color: '#8a857f', roughness: 0.95, flatShading: true });
+  const rockMat = toon({ color: '#8a857f', roughness: 0.95, flatShading: true });
   chunkedInstances(scene, rockGeometry(), rockMat, rocks, { castShadow: true, receiveShadow: true });
 
   // Berry bushes (berries are separate instances so they can be picked)
@@ -347,7 +365,7 @@ function scatter(scene, world) {
     berryParts.push({ geo: new THREE.SphereGeometry(0.1, 7, 5), color: k % 3 ? '#d81e3a' : '#a0122a', matrix: xf(x, y, z) });
   }
   const berryGeo = mergeColored(berryParts);
-  const berryMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35 });
+  const berryMat = toon({ vertexColors: true, roughness: 0.35 });
   chunkedInstances(scene, bushGeo, vegMat, bushes, { castShadow: true });
   const berryItems = bushes.map((b) => ({ ...b }));
   chunkedInstances(scene, berryGeo, berryMat, berryItems, { castShadow: false });
@@ -369,7 +387,7 @@ function scatter(scene, world) {
     { geo: cap(), color: '#d8322b', matrix: xf(0, 0.28, 0, 0, 0, 0, [1, 0.75, 1]) },
     ...spots,
   ]);
-  const shroomMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 });
+  const shroomMat = toon({ vertexColors: true, roughness: 0.6 });
   chunkedInstances(scene, goodGeo, shroomMat, mushroomsGood, { castShadow: false });
   chunkedInstances(scene, badGeo, shroomMat, mushroomsBad, { castShadow: false });
 
@@ -405,7 +423,7 @@ function buildTrail(scene) {
       items.push({ x: px, y: h - 0.05, z: pz, ry: rnd() * TAU, s: 1 });
     }
   }
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, flatShading: true });
+  const mat = toon({ vertexColors: true, roughness: 0.8, flatShading: true });
   chunkedInstances(scene, markerGeo, mat, items, { castShadow: true });
 }
 
@@ -445,7 +463,7 @@ function signTexture(title, sub) {
 
 function makeSign(title, sub) {
   const g = new THREE.Group();
-  const wood = new THREE.MeshStandardMaterial({ color: '#5b3d22', roughness: 0.9 });
+  const wood = toon({ color: '#5b3d22', roughness: 0.9 });
   for (const x of [-1.05, 1.05]) {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 2.2, 6), wood);
     post.position.set(x, 1.1, 0);
@@ -453,7 +471,7 @@ function makeSign(title, sub) {
     g.add(post);
   }
   const tex = signTexture(title, sub);
-  const face = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
+  const face = toon({ map: tex, roughness: 0.85 });
   const board = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.2, 0.08), [wood, wood, wood, wood, face, face]);
   board.position.y = 1.75;
   board.castShadow = true;
@@ -463,7 +481,7 @@ function makeSign(title, sub) {
 
 function makeFire() {
   const g = new THREE.Group();
-  const stoneMat = new THREE.MeshStandardMaterial({ color: '#6f6b66', roughness: 0.95, flatShading: true });
+  const stoneMat = toon({ color: '#6f6b66', roughness: 0.95, flatShading: true });
   for (let k = 0; k < 9; k++) {
     const a = (k / 9) * TAU;
     const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.24, 0), stoneMat);
@@ -471,7 +489,7 @@ function makeFire() {
     s.rotation.set(k, k * 2, 0);
     g.add(s);
   }
-  const logMat = new THREE.MeshStandardMaterial({ color: '#5a3a21', roughness: 0.9 });
+  const logMat = toon({ color: '#5a3a21', roughness: 0.9 });
   for (let k = 0; k < 4; k++) {
     const log = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.1, 6), logMat);
     const a = (k / 4) * TAU;
@@ -499,7 +517,7 @@ function makeFire() {
 
 function makeCrate() {
   const g = new THREE.Group();
-  const wood = new THREE.MeshStandardMaterial({ color: '#9b6b3b', roughness: 0.85 });
+  const wood = toon({ color: '#9b6b3b', roughness: 0.85 });
   const label = canvasTexture(256, 128, (ctx, w, h) => {
     ctx.fillStyle = '#9b6b3b';
     ctx.fillRect(0, 0, w, h);
@@ -513,7 +531,7 @@ function makeCrate() {
     ctx.textBaseline = 'middle';
     ctx.fillText('SUPPLIES', 92, 66);
   });
-  const face = new THREE.MeshStandardMaterial({ map: label, roughness: 0.85 });
+  const face = toon({ map: label, roughness: 0.85 });
   const box = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.75), [wood, wood, wood, wood, face, wood]);
   box.position.y = 0.35;
   box.castShadow = true;
@@ -546,7 +564,7 @@ function buildCamp(scene, world, c, idx) {
     const t = new THREE.Group();
     t.position.set(x, 0, z);
     t.rotation.y = ry;
-    const body = new THREE.Mesh(tentGeometry(1.35, 2.7), new THREE.MeshStandardMaterial({ color: tentColors[k], roughness: 0.7 }));
+    const body = new THREE.Mesh(tentGeometry(1.35, 2.7), toon({ color: tentColors[k], roughness: 0.7 }));
     body.castShadow = true;
     body.receiveShadow = true;
     t.add(body);
@@ -571,7 +589,7 @@ function buildCamp(scene, world, c, idx) {
   sign.rotation.y = 0.35;
   g.add(sign);
 
-  const logMat = new THREE.MeshStandardMaterial({ color: '#6a4626', roughness: 0.9 });
+  const logMat = toon({ color: '#6a4626', roughness: 0.9 });
   for (const [x, z, ry] of [[-1.9, 1.3, 0.9], [1.6, -1.9, 0.5]]) {
     const log = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.7, 8), logMat);
     log.rotation.set(0, ry, Math.PI / 2);
@@ -581,11 +599,11 @@ function buildCamp(scene, world, c, idx) {
   }
 
   // Tall flag so you can spot the camp from below
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 7, 6), new THREE.MeshStandardMaterial({ color: '#c9ccd1', metalness: 0.6, roughness: 0.4 }));
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 7, 6), toon({ color: '#c9ccd1', metalness: 0.6, roughness: 0.4 }));
   pole.position.set(0, 3.5, -6.5);
   pole.castShadow = true;
   g.add(pole);
-  const flagMat = new THREE.MeshStandardMaterial({ color: '#ff6b1f', roughness: 0.6, side: THREE.DoubleSide });
+  const flagMat = toon({ color: '#ff6b1f', roughness: 0.6, side: THREE.DoubleSide });
   const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.1, 8, 1), flagMat);
   flag.position.set(0.92, 6.4, -6.5);
   g.add(flag);
@@ -648,7 +666,7 @@ function buildSummit(scene, world, envMap) {
   g.position.set(SUMMIT.x, SUMMIT.h, SUMMIT.z);
   scene.add(g);
 
-  const granite = new THREE.MeshStandardMaterial({ color: '#3b4048', roughness: 0.6, metalness: 0.1 });
+  const granite = toon({ color: '#3b4048', roughness: 0.6, metalness: 0.1 });
   const gold = new THREE.MeshStandardMaterial({ color: '#ffc23d', roughness: 0.25, metalness: 1, envMap });
   const base = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.9, 0.55, 48), granite);
   base.position.y = 0.25;
@@ -672,14 +690,14 @@ function buildSummit(scene, world, envMap) {
   g.add(sign);
 
   // Summit flag pole and prayer flags strung to three short poles
-  const poleMat = new THREE.MeshStandardMaterial({ color: '#d3d6db', metalness: 0.6, roughness: 0.35 });
+  const poleMat = toon({ color: '#d3d6db', metalness: 0.6, roughness: 0.35 });
   const mainPole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 8, 8), poleMat);
   mainPole.position.set(0, 4, -8);
   mainPole.castShadow = true;
   g.add(mainPole);
   const flag = new THREE.Mesh(
     new THREE.PlaneGeometry(3.2, 1.9, 14, 4),
-    new THREE.MeshStandardMaterial({ color: '#ff6b1f', roughness: 0.6, side: THREE.DoubleSide }),
+    toon({ color: '#ff6b1f', roughness: 0.6, side: THREE.DoubleSide }),
   );
   flag.position.set(1.62, 7.0, -8);
   g.add(flag);
@@ -702,7 +720,7 @@ function buildSummit(scene, world, envMap) {
       parts.push({ geo: new THREE.PlaneGeometry(0.42, 0.5), color: prayer[k % 5], matrix: xf(p.x, p.y - 0.25, p.z, 0, ang + Math.PI / 2, 0) });
     }
   });
-  const pf = new THREE.Mesh(mergeColored(parts), new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.7 }));
+  const pf = new THREE.Mesh(mergeColored(parts), toon({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.7 }));
   g.add(pf);
 
   // A golden beam so you can always see where the top is
@@ -742,6 +760,55 @@ function buildSummit(scene, world, envMap) {
   });
 }
 
+
+// ---------------------------------------------------------------- summit snow plume
+// Wind tears a long plume of snow off the top, the classic big-mountain sight
+function buildPlume(scene, world) {
+  const N = 80;
+  const pos = new Float32Array(N * 3);
+  const size = new Float32Array(N);
+  const alpha = new Float32Array(N);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+  geo.setAttribute('aAlpha', new THREE.BufferAttribute(alpha, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color('#eef3fb') }, uScale: { value: 500 }, uLight: { value: 1 } },
+    vertexShader: `attribute float aSize; attribute float aAlpha; uniform float uScale; varying float vA;
+      void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = min(aSize * uScale / -mv.z, 700.0); vA = aAlpha; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uColor; uniform float uLight; varying float vA;
+      void main() { float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.05, d); gl_FragColor = vec4(uColor * uLight, a * a * vA); }`,
+    transparent: true,
+    depthWrite: false,
+  });
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false;
+  scene.add(pts);
+  const rnd = mulberry32(12);
+  const parts = Array.from({ length: N }, (_, i) => ({ t: i / N, jx: rnd() - 0.5, jy: rnd() - 0.5, jz: rnd() - 0.5, s: 0.7 + rnd() * 0.6 }));
+  const wind = new THREE.Vector3(1, 0, 0.32).normalize();
+  world.plume = { mat };
+  world.updaters.push((dt, t, env) => {
+    const d = env.playerPos ? Math.hypot(env.playerPos.x - SUMMIT.x, env.playerPos.z - SUMMIT.z) : 999;
+    const fade = smoothstep(25, 90, d);
+    mat.uniforms.uLight.value = 0.25 + (env.dayness ?? 1) * 0.8;
+    parts.forEach((p, i) => {
+      p.t += dt * 0.045;
+      if (p.t > 1) p.t -= 1;
+      const along = p.t * 150;
+      const spread = 3 + p.t * 26;
+      pos[i * 3] = SUMMIT.x + wind.x * along + p.jx * spread;
+      pos[i * 3 + 1] = SUMMIT.h + 4 + p.jy * spread * 0.5 - p.t * 30;
+      pos[i * 3 + 2] = SUMMIT.z + wind.z * along + p.jz * spread;
+      size[i] = (10 + p.t * 55) * p.s;
+      alpha[i] = Math.sin(Math.PI * p.t) * 0.42 * fade;
+    });
+    geo.attributes.position.needsUpdate = true;
+    geo.attributes.aSize.needsUpdate = true;
+    geo.attributes.aAlpha.needsUpdate = true;
+  });
+}
+
 // ---------------------------------------------------------------- clouds
 function buildClouds(scene, world) {
   const rnd = mulberry32(77);
@@ -762,7 +829,7 @@ function buildClouds(scene, world) {
       });
     }
   }
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, emissive: '#7d8796' });
+  const mat = toon({ vertexColors: true, emissive: '#7d8796' });
   const mesh = new THREE.Mesh(mergeColored(parts), mat);
   mesh.frustumCulled = false;
   scene.add(mesh);
@@ -826,7 +893,7 @@ function buildBoxes(scene, world) {
     spots.push({ x: p.x, z: p.z });
   }
   const tex = boxTexture();
-  const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: 0.22, roughness: 0.5 });
+  const mat = toon({ map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: 0.22, roughness: 0.5 });
   const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, spots.length);
   mesh.castShadow = true;
   mesh.frustumCulled = false;
@@ -855,13 +922,13 @@ function buildProps(scene, world) {
   // A giant rubber duck floating in the big lake
   const L = HF.LAKES[1];
   const duck = new THREE.Group();
-  const yellow = new THREE.MeshStandardMaterial({ color: '#ffd23a', roughness: 0.35 });
+  const yellow = toon({ color: '#ffd23a', roughness: 0.35 });
   const body = new THREE.Mesh(new THREE.SphereGeometry(3.2, 24, 16), yellow);
   body.scale.set(1.25, 0.8, 1);
   body.position.y = 1.2;
   const headM = new THREE.Mesh(new THREE.SphereGeometry(1.9, 24, 16), yellow);
   headM.position.set(2.2, 4.0, 0);
-  const beak = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 10), new THREE.MeshStandardMaterial({ color: '#ff8a00', roughness: 0.4 }));
+  const beak = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 10), toon({ color: '#ff8a00', roughness: 0.4 }));
   beak.scale.set(1.3, 0.45, 0.9);
   beak.position.set(4.0, 3.7, 0);
   const tail = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.8, 12), yellow);
@@ -869,7 +936,7 @@ function buildProps(scene, world) {
   tail.rotation.z = 1.0;
   duck.add(body, headM, beak, tail);
   for (const s of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), new THREE.MeshStandardMaterial({ color: '#111', roughness: 0.2 }));
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), toon({ color: '#111', roughness: 0.2 }));
     eye.position.set(3.4, 4.6, s * 0.95);
     duck.add(eye);
   }
@@ -883,8 +950,8 @@ function buildProps(scene, world) {
   });
 
   // Pink lawn flamingos at Base Camp
-  const pink = new THREE.MeshStandardMaterial({ color: '#ff6fae', roughness: 0.5 });
-  const black = new THREE.MeshStandardMaterial({ color: '#202020', roughness: 0.6 });
+  const pink = toon({ color: '#ff6fae', roughness: 0.5 });
+  const black = toon({ color: '#202020', roughness: 0.6 });
   [[4.6, 7.4, 0.4], [5.6, 6.2, -0.5]].forEach(([lx, lz, ry]) => {
     const f = new THREE.Group();
     const b = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10), pink);
@@ -923,7 +990,7 @@ function buildProps(scene, world) {
 
   // A comfy couch at Camp 1
   const couch = new THREE.Group();
-  const fabric = new THREE.MeshStandardMaterial({ color: '#c98a2e', roughness: 0.95 });
+  const fabric = toon({ color: '#c98a2e', roughness: 0.95 });
   const seat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.45, 0.9), fabric);
   seat.position.y = 0.35;
   const backR = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.75, 0.25), fabric);
@@ -933,7 +1000,7 @@ function buildProps(scene, world) {
     const arm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.9), fabric);
     arm.position.set(s * 1.1, 0.55, 0);
     couch.add(arm);
-    const cush = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.15, 0.75), new THREE.MeshStandardMaterial({ color: '#e0a548', roughness: 0.95 }));
+    const cush = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.15, 0.75), toon({ color: '#e0a548', roughness: 0.95 }));
     cush.position.set(s * 0.5, 0.64, 0.05);
     couch.add(cush);
   }
@@ -941,9 +1008,9 @@ function buildProps(scene, world) {
 
   // A snack machine at Camp 2
   const vend = new THREE.Group();
-  const boxM = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.1, 0.8), new THREE.MeshStandardMaterial({ color: '#d8322b', roughness: 0.5 }));
+  const boxM = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.1, 0.8), toon({ color: '#d8322b', roughness: 0.5 }));
   boxM.position.y = 1.05;
-  const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.3), new THREE.MeshStandardMaterial({ color: '#bfe6ff', emissive: '#9fd8ff', emissiveIntensity: 0.6, roughness: 0.2 }));
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.3), toon({ color: '#bfe6ff', emissive: '#9fd8ff', emissiveIntensity: 0.6, roughness: 0.2 }));
   glass.position.set(-0.12, 1.25, 0.41);
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.22), new THREE.MeshBasicMaterial({ map: canvasTexture(256, 64, (ctx, w, h) => {
     ctx.fillStyle = '#fff3c4'; ctx.fillRect(0, 0, w, h);
@@ -956,7 +1023,7 @@ function buildProps(scene, world) {
 
   // A toilet way up at Camp 3. Nobody knows why.
   const toilet = new THREE.Group();
-  const porcelain = new THREE.MeshStandardMaterial({ color: '#f7f8fa', roughness: 0.25 });
+  const porcelain = toon({ color: '#f7f8fa', roughness: 0.25 });
   const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.22, 0.45, 18), porcelain);
   bowl.position.set(0, 0.23, 0.12);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.06, 8, 20), porcelain);
@@ -967,7 +1034,7 @@ function buildProps(scene, world) {
   const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 18), porcelain);
   lid.position.set(0, 0.62, -0.12);
   lid.rotation.x = -1.3;
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.03), new THREE.MeshStandardMaterial({ color: '#c0c7cf', metalness: 0.8, roughness: 0.3 }));
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.03), toon({ color: '#c0c7cf', metalness: 0.8, roughness: 0.3 }));
   handle.position.set(-0.22, 0.88, -0.12);
   toilet.add(bowl, rim, tank, lid, handle);
   addProp(c3, -6.4, 0.8, 1.3, toilet, 0.45, { kind: 'toilet', text: 'Flush the toilet' });
@@ -989,6 +1056,7 @@ export function buildWorld(scene, envMap) {
   CAMPS.forEach((c, i) => buildCamp(scene, world, c, i));
   buildSummit(scene, world, envMap);
   buildClouds(scene, world);
+  buildPlume(scene, world);
   buildBoxes(scene, world);
   buildProps(scene, world);
   world.update = (dt, t, env) => {

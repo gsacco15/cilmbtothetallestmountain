@@ -94,3 +94,22 @@ export function formatMeters(m) {
 }
 
 export const FONT_STACK = '"Big Shoulders Display", "Arial Narrow", Impact, sans-serif';
+
+// Cel shading: three flat bands of light, like a hand-painted film
+let gradient = null;
+export function toonGradient() {
+  if (!gradient) {
+    gradient = new THREE.DataTexture(new Uint8Array([72, 160, 255]), 3, 1, THREE.RedFormat);
+    gradient.minFilter = THREE.NearestFilter;
+    gradient.magFilter = THREE.NearestFilter;
+    gradient.generateMipmaps = false;
+    gradient.needsUpdate = true;
+  }
+  return gradient;
+}
+
+// Drop-in for MeshStandardMaterial options; ignores the shiny-metal settings
+export function toon(params = {}) {
+  const { roughness, metalness, envMap, envMapIntensity, flatShading, clearcoat, clearcoatRoughness, ...rest } = params;
+  return new THREE.MeshToonMaterial({ gradientMap: toonGradient(), ...rest });
+}

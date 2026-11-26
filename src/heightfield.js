@@ -168,7 +168,9 @@ export function normalYAt(x, z) {
 }
 
 export function snowLineAt(x, z) {
-  return 200 + nB(x * 0.012, z * 0.012) * 16;
+  // The peaks around the valley get snowcaps too
+  const r = Math.hypot(x, z);
+  return 192 + nB(x * 0.012, z * 0.012) * 16 - smoothstep(470, 640, r) * 92;
 }
 
 export function isSnowAt(x, z) {

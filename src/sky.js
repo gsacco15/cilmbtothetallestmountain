@@ -4,10 +4,11 @@ import { clamp, lerp, smoothstep } from './util.js';
 
 const C = (hex) => new THREE.Color(hex);
 const PAL = {
-  dayTop: C('#2f86de'), dayHorizon: C('#bfe2f6'),
+  dayTop: C('#2a6fd0'), dayHorizon: C('#cde4f2'),
   duskTop: C('#2d3d7c'), duskHorizon: C('#ff9a5c'),
   nightTop: C('#050b1c'), nightHorizon: C('#16244a'),
   ground: C('#3d4a3a'),
+  highHorizon: C('#8fb8e6'),
   sunDay: C('#fff3dc'), sunDusk: C('#ffb06a'),
   moon: C('#9fb4ff'),
 };
@@ -118,6 +119,8 @@ export class Sky {
     // Thinner air up high: a deeper blue overhead
     u.uTop.value.multiplyScalar(1 - altitude01 * 0.35 * day);
     u.uHorizon.value.lerpColors(PAL.nightHorizon, PAL.dayHorizon, day).lerp(PAL.duskHorizon, dusk * 0.8);
+    // Up high the air is clear: a bluer horizon
+    u.uHorizon.value.lerp(PAL.highHorizon, altitude01 * 0.45 * day);
     u.uGround.value.copy(u.uHorizon.value).multiplyScalar(0.55);
     u.uSunDir.value.copy(this.sunDir);
     u.uSunColor.value.lerpColors(PAL.sunDay, PAL.sunDusk, clamp(dusk * 1.4, 0, 1));
@@ -136,7 +139,7 @@ export class Sky {
     if (e >= 0) {
       this.sun.position.copy(focus).addScaledVector(this.sunDir, 220);
       this.sun.color.lerpColors(PAL.sunDusk, PAL.sunDay, smoothstep(0.05, 0.4, e));
-      this.sun.intensity = 3.1 * sunUp;
+      this.sun.intensity = 3.4 * sunUp;
     } else {
       this.sun.position.copy(focus).addScaledVector(this.moonDir, 220);
       this.sun.color.copy(PAL.moon);
@@ -146,7 +149,7 @@ export class Sky {
     this.sun.target.position.copy(focus);
     this.sun.target.updateMatrixWorld();
 
-    this.hemi.intensity = lerp(0.55, 1.15, smoothstep(-0.2, 0.25, e));
+    this.hemi.intensity = lerp(0.5, 0.9, smoothstep(-0.2, 0.25, e));
     this.hemi.color.lerpColors(new THREE.Color('#5a6fb0'), new THREE.Color('#cfe6ff'), day);
     this.hemi.groundColor.lerpColors(new THREE.Color('#1d2433'), new THREE.Color('#4b5a3c'), day);
 

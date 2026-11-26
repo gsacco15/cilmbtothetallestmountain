@@ -1,7 +1,32 @@
-// All sounds are made on the fly with the Web Audio API, so there are no
-// sound files to download.
+// Sound: voices, ambience and animal calls recorded with ElevenLabs (in
+// assets/audio), plus small effects made on the fly with the Web Audio API.
+// If a recording can't load, the game falls back to the made-on-the-fly sound.
+
+const A = 'assets/audio/';
+export const AUDIO_FILES = {
+  amb_meadow: A + 'ambient/meadow.mp3',
+  amb_wind: A + 'ambient/wind.mp3',
+  amb_night: A + 'ambient/night.mp3',
+  amb_fire: A + 'ambient/campfire.mp3',
+  wolf: A + 'animals/wolf.mp3',
+  bear: A + 'animals/bear.mp3',
+  eagle: A + 'animals/eagle.mp3',
+  snake: A + 'animals/snake.mp3',
+  goat: A + 'animals/goat.mp3',
+  leopard: A + 'animals/leopard.mp3',
+};
+for (let i = 1; i <= 9; i++) AUDIO_FILES[`rielle_0${i}`] = A + `voice/rielle_0${i}.mp3`;
+for (let i = 1; i <= 6; i++) AUDIO_FILES[`ben_0${i}`] = A + `voice/ben_0${i}.mp3`;
+
+// Animal calls that have a recording
+const CALLS = { howl: 'wolf', growl: 'bear', rattle: 'snake', screech: 'eagle', bleat: 'goat', roar: 'leopard' };
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
 export class AudioFX {
   constructor() {
+    this.raw = {};
+    this.buffers = {};
+    this.beds = {};
     this.ctx = null;
     this.muted = false;
     this.birdT = 2;
@@ -45,6 +70,123 @@ export class AudioFX {
     this.windGain.gain.value = 0;
     src.connect(this.windFilter).connect(this.windGain).connect(this.master);
     src.start();
+
+    // Buses: ambience ducks while someone is talking
+    this.ambBus = ctx.createGain();
+    this.ambBus.connect(this.master);
+    this.voiceBus = ctx.createGain();
+    this.voiceBus.gain.value = 1.0;
+    this.voiceBus.connect(this.master);
+    for (const key of Object.keys(this.raw)) this.decode(key);
+  }
+
+  // Start downloading recordings right away (decoding waits for the first click)
+  prefetch() {
+    for (const [key, url] of Object.entries(AUDIO_FILES)) {
+      fetch(url)
+        .then((r) => (r.ok ? r.arrayBuffer() : null))
+        .then((ab) => {
+          if (!ab) return;
+          this.raw[key] = ab;
+          if (this.ctx) this.decode(key);
+        })
+        .catch(() => {});
+    }
+  }
+
+  decode(key) {
+    const ab = this.raw[key];
+    if (!ab || !this.ctx) return;
+    delete this.raw[key];
+    this.ctx.decodeAudioData(ab).then((buf) => {
+      this.buffers[key] = buf;
+      if (key.startsWith('amb_')) this.startBed(key);
+    }).catch(() => {});
+  }
+
+  // Ambient loops crossfade into themselves so there's no seam
+  startBed(key) {
+    const g = this.ctx.createGain();
+    g.gain.value = 0;
+    g.connect(this.ambBus);
+    const bed = { key, gain: g, buffer: this.buffers[key], nextAt: 0 };
+    this.beds[key] = bed;
+    this.scheduleBed(bed, this.ctx.currentTime + 0.05);
+  }
+
+  scheduleBed(bed, when) {
+    const ctx = this.ctx;
+    const dur = bed.buffer.duration;
+    const fade = Math.min(3, dur * 0.2);
+    const src = ctx.createBufferSource();
+    src.buffer = bed.buffer;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, when);
+    env.gain.linearRampToValueAtTime(1, when + fade);
+    env.gain.setValueAtTime(1, when + dur - fade);
+    env.gain.linearRampToValueAtTime(0, when + dur);
+    src.connect(env).connect(bed.gain);
+    src.start(when);
+    src.stop(when + dur + 0.05);
+    bed.nextAt = when + dur - fade;
+  }
+
+  setBed(key, level) {
+    const bed = this.beds[key];
+    if (bed) bed.gain.gain.setTargetAtTime(level, this.ctx.currentTime, 0.6);
+  }
+
+  playSample(key, { gain = 0.9, rate = 1 } = {}) {
+    const buf = this.buffers[key];
+    if (!this.ready || !buf) return false;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    const g = this.ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g).connect(this.master);
+    src.start();
+    return true;
+  }
+
+  hasVoice(key) {
+    return !!this.buffers[key];
+  }
+
+  // A voice line. Radio lines sound like a walkie-talkie. Returns its length.
+  playVoice(key, { radio = false } = {}) {
+    const buf = this.buffers[key];
+    if (!this.ready || !buf) return 0;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + (radio ? 0.18 : 0.05);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    let node = src;
+    if (radio) {
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 450;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 3200;
+      const shaper = ctx.createWaveShaper();
+      const curve = new Float32Array(256);
+      for (let i = 0; i < 256; i++) { const x = (i / 255) * 2 - 1; curve[i] = Math.tanh(x * 2.2) / Math.tanh(2.2); }
+      shaper.curve = curve;
+      node.connect(hp).connect(lp).connect(shaper);
+      node = shaper;
+      this.tone(1350, 0.05, { type: 'square', gain: 0.04 });
+      this.noise(0.14, { type: 'highpass', freq: 2500, gain: 0.07 });
+      this.noise(0.2, { type: 'highpass', freq: 2500, gain: 0.07, delay: buf.duration + 0.2 });
+      this.tone(1100, 0.05, { type: 'square', gain: 0.035, delay: buf.duration + 0.22 });
+    }
+    const g = ctx.createGain();
+    g.gain.value = radio ? 1.15 : 1.0;
+    node.connect(g).connect(this.voiceBus);
+    src.start(t);
+    this.ambBus.gain.setTargetAtTime(0.4, t, 0.15);
+    this.ambBus.gain.setTargetAtTime(1, t + buf.duration, 0.5);
+    return buf.duration + (radio ? 0.3 : 0);
   }
 
   setMuted(m) {
@@ -120,6 +262,11 @@ export class AudioFX {
 
   play(name, opt = {}) {
     if (!this.ready) return;
+    if (CALLS[name] && this.buffers[CALLS[name]]) {
+      const gain = opt.dist != null ? Math.min(1, Math.max(0.3, 1.2 - opt.dist / 60)) : 0.9;
+      this.playSample(CALLS[name], { gain, rate: 0.92 + Math.random() * 0.16 });
+      return;
+    }
     switch (name) {
       case 'step': {
         const surf = opt.surface || 'grass';
@@ -266,12 +413,23 @@ export class AudioFX {
   update(dt, env) {
     if (!this.ready) return;
     const t = this.ctx.currentTime;
+    const recorded = (k) => !!this.beds[k];
     const wind = 0.02 + env.altitude01 * 0.22 + env.night * 0.04 + (env.moving ? 0.01 : 0);
-    this.windGain.gain.setTargetAtTime(env.paused ? 0 : wind, t, 0.5);
+    this.windGain.gain.setTargetAtTime(env.paused || recorded('amb_wind') ? 0 : wind, t, 0.5);
+    // Keep the ambient loops going and set how loud each one is
+    for (const bed of Object.values(this.beds)) {
+      if (t > bed.nextAt - 1.5) this.scheduleBed(bed, Math.max(bed.nextAt, t + 0.05));
+    }
+    const k = env.paused ? 0.35 : 1;
+    const low = 1 - smooth(0.3, 0.62, env.altitude01);
+    this.setBed('amb_meadow', k * (1 - env.night) * low * 0.75);
+    this.setBed('amb_night', k * env.night * (1 - smooth(0.4, 0.72, env.altitude01)) * 0.8);
+    this.setBed('amb_wind', k * Math.min(0.9, 0.1 + env.altitude01 * 0.85 + env.night * 0.06));
+    this.setBed('amb_fire', k * (env.fire || 0) * 0.95);
     this.windFilter.frequency.setTargetAtTime(320 + env.altitude01 * 500 + Math.sin(t * 0.3) * 120, t, 0.8);
     if (env.paused) return;
 
-    if (env.night < 0.5 && env.altitude01 < 0.45) {
+    if (env.night < 0.5 && env.altitude01 < 0.45 && !recorded('amb_meadow')) {
       this.birdT -= dt;
       if (this.birdT <= 0) {
         this.birdT = 2.5 + Math.random() * 5;
@@ -280,14 +438,14 @@ export class AudioFX {
         for (let i = 0; i < n; i++) this.tone(base, 0.09, { gain: 0.035, slide: base * 1.35, delay: i * 0.13 });
       }
     }
-    if (env.night > 0.5 && env.altitude01 < 0.5) {
+    if (env.night > 0.5 && env.altitude01 < 0.5 && !recorded('amb_night')) {
       this.cricketT -= dt;
       if (this.cricketT <= 0) {
         this.cricketT = 0.7 + Math.random() * 0.5;
         for (let i = 0; i < 3; i++) this.tone(4300, 0.04, { gain: 0.015, delay: i * 0.06 });
       }
     }
-    if (env.nearFire) {
+    if (env.nearFire && !recorded('amb_fire')) {
       this.crackleT -= dt;
       if (this.crackleT <= 0) {
         this.crackleT = 0.05 + Math.random() * 0.25;

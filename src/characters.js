@@ -4,7 +4,7 @@
 //   Dr. Rielle (a.k.a. Mrs. Rielle): doctor with long dark hair, a tan sherpa
 //          jacket over a lavender layer and olive leggings.
 import * as THREE from 'three';
-import { clamp, damp, canvasTexture, FONT_STACK } from './util.js';
+import { clamp, damp, canvasTexture, FONT_STACK, toon } from './util.js';
 
 export const SKIN_TONES = ['#f1cdb3', '#e2ad84', '#c68a5e', '#9a6440', '#6b4128'];
 export const HAIR_COLORS = ['#33201a', '#5a3620', '#1e1a18', '#d4ad5e', '#9c3b1f'];
@@ -40,7 +40,7 @@ export const CHARACTERS = {
 };
 
 function std(color, extra = {}) {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.75, ...extra });
+  return toon({ color, ...extra });
 }
 
 function mesh(geo, mat, parent, x = 0, y = 0, z = 0) {
@@ -269,10 +269,10 @@ export function buildCharacter(def, custom = {}) {
   // Chest details
   const chestZ = 0.16 * u * 0.72 + 0.004 * u;
   if (isDaddy) {
-    const tape = new THREE.Mesh(new THREE.PlaneGeometry(0.12 * u, 0.03 * u), new THREE.MeshStandardMaterial({ map: nameTape('DADDY', '#14284a', '#f2c230') }));
+    const tape = new THREE.Mesh(new THREE.PlaneGeometry(0.12 * u, 0.03 * u), toon({ map: nameTape('DADDY', '#14284a', '#f2c230') }));
     tape.position.set(-0.075 * u, 0.4 * u, chestZ);
     spine.add(tape);
-    const patch = new THREE.Mesh(new THREE.CircleGeometry(0.035 * u, 20), new THREE.MeshStandardMaterial({ map: anchorPatch() }));
+    const patch = new THREE.Mesh(new THREE.CircleGeometry(0.035 * u, 20), toon({ map: anchorPatch() }));
     patch.position.set(0.075 * u, 0.4 * u, chestZ);
     spine.add(patch);
     mesh(new THREE.BoxGeometry(0.008 * u, 0.46 * u, 0.006 * u), mats.metal, spine, 0, 0.27 * u, chestZ);
@@ -280,7 +280,7 @@ export function buildCharacter(def, custom = {}) {
     const pocket = new THREE.Mesh(new THREE.PlaneGeometry(0.075 * u, 0.085 * u), std(colors.pocket, { roughness: 0.5 }));
     pocket.position.set(0.065 * u, 0.37 * u, chestZ + 0.003 * u);
     spine.add(pocket);
-    const badge = new THREE.Mesh(new THREE.PlaneGeometry(0.1 * u, 0.03 * u), new THREE.MeshStandardMaterial({ map: nameTape('DR. RIELLE', '#ffffff', '#2a5e8c') }));
+    const badge = new THREE.Mesh(new THREE.PlaneGeometry(0.1 * u, 0.03 * u), toon({ map: nameTape('DR. RIELLE', '#ffffff', '#2a5e8c') }));
     badge.position.set(-0.07 * u, 0.42 * u, chestZ + 0.003 * u);
     spine.add(badge);
     for (let k = 0; k < 4; k++) mesh(new THREE.SphereGeometry(0.008 * u, 6, 5), std('#6f5f45'), spine, 0, (0.5 - k * 0.12) * u, chestZ + 0.002 * u);
@@ -303,7 +303,7 @@ export function buildCharacter(def, custom = {}) {
     const strip = mesh(new THREE.BoxGeometry(0.03 * u, 0.2 * u, 0.006 * u), ribbon, medal, s * 0.04 * u, 0.44 * u, chestZ + 0.012 * u);
     strip.rotation.z = s * 0.35;
   }
-  const disc = mesh(new THREE.CylinderGeometry(0.045 * u, 0.045 * u, 0.01 * u, 24), [std('#c9ced4', { metalness: 0.8, roughness: 0.3 }), new THREE.MeshStandardMaterial({ map: medalFace(), metalness: 0.5, roughness: 0.35 }), std('#c9ced4')], medal, 0, 0.32 * u, chestZ + 0.02 * u);
+  const disc = mesh(new THREE.CylinderGeometry(0.045 * u, 0.045 * u, 0.01 * u, 24), [std('#c9ced4', { metalness: 0.8, roughness: 0.3 }), toon({ map: medalFace(), metalness: 0.5, roughness: 0.35 }), std('#c9ced4')], medal, 0, 0.32 * u, chestZ + 0.02 * u);
   disc.rotation.x = Math.PI / 2;
   medal.visible = false;
 

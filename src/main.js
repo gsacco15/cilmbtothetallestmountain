@@ -10,7 +10,9 @@ import { Input, LOOK_SPEED, clampPitch } from './input.js';
 import { UI } from './ui.js';
 import { Player } from './player.js';
 import { STUFF, randomStuff } from './stuff.js';
-import { clamp, lerp, damp, smoothstep, formatMeters, TAU } from './util.js';
+import { InkPass } from './ink.js';
+import { Dialog } from './dialog.js';
+import { clamp, lerp, damp, smoothstep, formatMeters, TAU, toon } from './util.js';
 
 const { CAMPS, SUMMIT, heightAt, inSafeZone, nearestPond, isSnowAt, altitudeMeters, progressFromHeight, WATER } = HF;
 
@@ -58,7 +60,7 @@ class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 3200);
+    this.camera = new THREE.PerspectiveCamera(58, 1, 0.25, 3200);
     this.clock = new THREE.Clock();
     this.time = 0;
     this.save = loadSave();
@@ -122,8 +124,9 @@ class Game {
     this.hooks = {
       hurtPlayer: (dmg, a, kx, kz, knock) => this.onHurt(dmg, a, kx, kz, knock),
       onAlert: (a) => {
-        this.audio.play(ALERT_SOUND[a.type]);
+        this.audio.play(ALERT_SOUND[a.type], { dist: this.player ? a.pos.distanceTo(this.player.pos) : 30 });
         this.ui.toast(`${a.cfg.label} spotted you!`, 'danger', `alert-${a.type}`, 9);
+        this.dialog.trigger('animal');
       },
       onScared: (a, silly) => {
         this.run.scared += 1;
@@ -141,6 +144,9 @@ class Game {
 
     this.animals = new AnimalManager(this.scene);
     this.audio = new AudioFX();
+    this.audio.prefetch();
+    this.dialog = new Dialog(this.audio);
+    this.ink = new InkPass(this.renderer);
     this.input = new Input(this.canvas);
     this.input.onLockLost = () => { if (this.state === 'playing') this.pause(); };
     this.ui = new UI();
@@ -257,6 +263,10 @@ class Game {
     // Portrait phones get a wider view so you can see around you
     this.camera.fov = w / h < 0.8 ? 70 : 58;
     this.applyViewOffset();
+    if (this.ink) this.ink.setSize();
+    if (this.world && this.world.plume) {
+      this.world.plume.mat.uniforms.uScale.value = this.renderer.getDrawingBufferSize(v1).y / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2));
+    }
   }
 
   applyViewOffset() {
@@ -294,6 +304,7 @@ class Game {
     this.ui.show('screen-end', false);
     this.ui.show('screen-title', true);
     this.ui.clearToasts();
+    this.dialog.stop();
     this.hour = 17.4;
     this.clearPeels();
     for (const [id, rig] of Object.entries(this.rigs)) {
@@ -391,9 +402,12 @@ class Game {
     const tips = [
       [0.4, again ? 'Back at the bottom. Try again!' : `Good luck! ${other} will wait at Base Camp.`, 'gold'],
       [3.2, 'Open the supply crate before you leave.', ''],
-      [7, 'Follow the orange flags. The gold light is the summit.', ''],
-      [11, "Purple boxes are full of Rielle's random stuff. Somehow it all helps!", 'stuff'],
+      [9, 'Follow the orange flags. The gold light is the summit.', ''],
+      [14, "Purple boxes are full of Rielle's random stuff. Somehow it all helps!", 'stuff'],
     ];
+    this.dialog.newRun();
+    this.dialog.stop();
+    setTimeout(() => { if (this.state === 'playing' || this.state === 'intro') this.dialog.trigger('start'); }, 1400);
     if (this.player.stuff) tips.splice(1, 0, [1.8, `You packed: ${STUFF[this.player.stuff].name}. Trust me, it'll help. (Press 5)`, 'stuff']);
     if (this.tipTimers) this.tipTimers.forEach(clearTimeout);
     this.tipTimers = tips.map(([d, text, kind]) => setTimeout(() => { if (this.state === 'playing' || this.state === 'intro') this.ui.toast(text, kind); }, d * 1000));
@@ -465,6 +479,8 @@ class Game {
     this.input.enabled = false;
     this.input.releaseLock();
     this.audio.play('death');
+    this.dialog.stop();
+    if (this.choice === 'daddy') setTimeout(() => this.dialog.trigger('death'), 1300);
     this.ui.setPrompt(null);
     this.ui.setThreat(null);
     this.recordBest();
@@ -500,6 +516,8 @@ class Game {
     this.save.wins = (this.save.wins || 0) + 1;
     this.recordBest();
     this.audio.play('win');
+    this.dialog.stop();
+    setTimeout(() => this.dialog.trigger('win'), 1600);
     // Stand next to the car
     const car = this.world.summit.group.position;
     this.player.pos.set(car.x + 5.6, 0, car.z + 1.5);
@@ -585,7 +603,10 @@ class Game {
       this.ui.toast(`Day ${this.day}`, 'gold');
     }
     const night = this.isNight();
-    if (night && !wasNight) this.ui.toast('Night is falling. Wolves come out at night. Get to a camp!', 'danger');
+    if (night && !wasNight) {
+      this.ui.toast('Night is falling. Wolves come out at night. Get to a camp!', 'danger');
+      this.dialog.trigger('night');
+    }
     if (!night && wasNight) this.ui.toast('The sun is up!', 'good');
   }
 
@@ -674,6 +695,7 @@ class Game {
     st.water = Math.min(100, st.water + 4);
     this.audio.play('eat');
     this.ui.toast('Yum, berries! +18 food', 'good', 'berries', 1.2);
+    this.dialog.trigger('berries');
   }
 
   eatMushroom(m) {
@@ -729,6 +751,7 @@ class Game {
     } else if (pr.kind === 'toilet') {
       this.flushes += 1;
       this.audio.play('flush');
+      this.dialog.trigger('toilet');
       if (this.flushes % 3 === 0 && !p.stuff) {
         p.stuff = randomStuff(this.lastStuffKey);
         this.lastStuffKey = p.stuff;
@@ -786,6 +809,7 @@ class Game {
         const n = this.animals.near(pos, 12, (a) => a.slip(pos.x, pos.z, hooks), p.yaw, 1.3);
         if (n) setTimeout(() => this.audio.play('slip'), 200);
         else msg = 'Psssht! Lemon fresh! The mountain has never been this clean.';
+        this.dialog.trigger('cleaner');
         break;
       }
       case 'stethoscope':
@@ -851,7 +875,7 @@ class Game {
 
   dropPeel(pos, yaw) {
     const g = new THREE.Group();
-    const yellow = new THREE.MeshStandardMaterial({ color: '#ffd93b', roughness: 0.5 });
+    const yellow = toon({ color: '#ffd93b' });
     for (let k = 0; k < 4; k++) {
       const strip = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 6), yellow);
       strip.scale.set(0.45, 0.18, 1.4);
@@ -860,7 +884,7 @@ class Game {
       strip.rotation.y = -a + Math.PI / 2;
       g.add(strip);
     }
-    const top = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshStandardMaterial({ color: '#6b4a2f' }));
+    const top = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), toon({ color: '#6b4a2f' }));
     top.position.y = 0.08;
     g.add(top);
     const x = pos.x - Math.sin(yaw) * 1.2, z = pos.z - Math.cos(yaw) * 1.2;
@@ -996,7 +1020,7 @@ class Game {
         break;
       case 'paused':
         this.updateWorld(0, this.player.pos, progressFromHeight(this.player.pos.y));
-        this.audio.update(dt, { altitude01: 0, night: 0, paused: true });
+        this.audio.update(dt, { ...(this.lastAudioEnv || { altitude01: 0, night: 0 }), paused: true });
         break;
       case 'sleeping':
         this.sleepT += dt;
@@ -1016,7 +1040,14 @@ class Game {
       default:
         break;
     }
-    this.renderer.render(this.scene, this.camera);
+    if (this.state !== 'title' && this.state !== 'loading') {
+      this.dialog.update({
+        player: this.choice,
+        farFromPartner: !this.npc || !this.player || this.player.pos.distanceTo(this.npc.root.position) > 22,
+        top: ['won', 'ended-win', 'ended', 'dying'].includes(this.state),
+      });
+    }
+    this.ink.render(this.scene, this.camera, { time: this.time, night: this.sky.night });
     inp.endFrame();
   }
 
@@ -1051,7 +1082,12 @@ class Game {
     this.run.best = Math.max(this.run.best, alt);
     const air = Math.exp(-alt / 8000);
     let nearFire = false;
-    for (const c of this.world.camps) if (Math.hypot(p.pos.x - c.firePos.x, p.pos.z - c.firePos.z) < 7.5) nearFire = true;
+    let fireDist = 999;
+    for (const c of this.world.camps) {
+      const fd = Math.hypot(p.pos.x - c.firePos.x, p.pos.z - c.firePos.z);
+      fireDist = Math.min(fireDist, fd);
+      if (fd < 7.5) nearFire = true;
+    }
 
     const ctx = {
       playerPos: p.pos,
@@ -1100,6 +1136,7 @@ class Game {
         this.maxCamp = Math.max(this.maxCamp, safe.id);
         this.audio.play('camp');
         this.ui.toast(`${safe.name} reached! ${formatMeters(safe.alt)} m`, 'gold');
+        this.dialog.trigger('camp');
         setTimeout(() => this.ui.toast('Animals stay away from the campfire.', ''), 1400);
       }
 
@@ -1149,14 +1186,17 @@ class Game {
     this.ui.updateGauge(alt, this.run.best, this.world.camps.map((c) => c.visited));
     this.ui.updateEffects(dt, p.stats.health / p.maxHealth, p.stats.warmth < 25 ? (25 - p.stats.warmth) / 25 * 0.8 : 0);
 
-    this.audio.update(dt, {
+    this.lastAudioEnv = {
       altitude01: prog,
       night: env.night,
       moving: p.speed > 1,
       nearFire,
+      fire: clamp(1 - (fireDist - 3) / 14, 0, 1),
       lowHealth: p.stats.health / p.maxHealth < 0.25 && p.alive,
       paused: false,
-    });
+    };
+    this.audio.update(dt, this.lastAudioEnv);
+    if (!intro && prog > 0.7) this.dialog.trigger('high');
 
     if (intro) this.updateIntroCamera(dt);
     else this.updateCamera(dt);
@@ -1203,7 +1243,9 @@ class Game {
   updateWorld(dt, focus, prog) {
     const env = this.sky.update(this.hour, focus, this.camera.position, prog);
     this.scene.fog.color.copy(this.sky.fogColor);
-    this.renderer.toneMappingExposure = 1 + env.night * 0.3;
+    this.scene.fog.near = 160 + prog * 260;
+    this.scene.fog.far = 1350 + prog * 1100;
+    this.renderer.toneMappingExposure = 0.92 + env.night * 0.35;
     this.world.update(dt, this.time, { playerPos: focus, dayness: env.dayness });
     // Headlamp at night
     if (this.player && this.player.rig.root.visible && this.state !== 'title') {
